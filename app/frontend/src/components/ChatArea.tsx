@@ -356,7 +356,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
           display: 'flex',
           flexDirection: 'column',
           padding: '24px 0 0',
-          paddingBottom: 220,
+          paddingBottom: 220, // clears the absolutely-positioned input overlay (max textarea ≈188px + 24px pad)
         }}
       >
         {showEmpty && <EmptyState onStarterClick={handleStarterClick} />}
@@ -404,7 +404,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
             )}
           </div>
         )}
-
 
       </div>
 
