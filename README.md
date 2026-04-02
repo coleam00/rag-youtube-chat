@@ -48,7 +48,7 @@ A dark-mode AI chat app that lets you have conversations grounded in YouTube vid
 
 1. Clone the repo and create a `.env` file in the project root:
 
-```
+```bash
 OPENROUTER_API_KEY=your-key-here
 ```
 
@@ -72,7 +72,7 @@ If you prefer to run the servers separately:
 
 1. Create a `.env` file in the project root:
 
-```
+```bash
 OPENROUTER_API_KEY=your-key-here
 ```
 
@@ -95,6 +95,8 @@ cd app/frontend
 bun install
 bun run dev
 ```
+
+4. Open [http://localhost:5173](http://localhost:5173)
 
 ## How It Works
 
