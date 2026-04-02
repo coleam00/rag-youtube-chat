@@ -9,7 +9,6 @@ chunks with their video metadata.
 from __future__ import annotations
 
 import logging
-from typing import List
 
 import numpy as np
 
@@ -20,10 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 async def retrieve(
-    query_embedding: List[float],
+    query_embedding: list[float],
     k: int = 5,
     min_score: float = RETRIEVAL_MIN_SCORE,
-) -> List[dict]:
+) -> list[dict]:
     """
     Find the top-K chunks most similar to *query_embedding*.
 
@@ -102,9 +101,9 @@ async def retrieve(
 
 
 def _cosine_similarity_batch(
-    query: "np.ndarray",
-    matrix: "np.ndarray",
-) -> "np.ndarray":
+    query: np.ndarray,
+    matrix: np.ndarray,
+) -> np.ndarray:
     """
     Compute cosine similarity between *query* (1-D) and every row of *matrix*.
 

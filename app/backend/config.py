@@ -10,29 +10,15 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Dynamically locate the .env file:
-# config.py lives at app/backend/config.py
-# The .env file lives 3 levels up (app/ -> workspace/claude/ -> workspace/ ...
-# actually at C:/Users/colem/open-source/adversarial-dev/.env)
-# We traverse parents to find a .env that contains OPENROUTER_API_KEY
-
 def _find_and_load_env() -> None:
     """Search parent directories for .env and load it."""
-    current = Path(__file__).resolve()
-    # Try each parent directory up to the filesystem root
-    for parent in current.parents:
+    for parent in Path(__file__).resolve().parents:
         candidate = parent / ".env"
         if candidate.exists():
             load_dotenv(dotenv_path=candidate, override=False)
             logger.info(f"Loaded .env from {candidate}")
             return
-    # Fallback: try the standard absolute path mentioned in the spec
-    fallback = Path(__file__).resolve().parents[4] / ".env"
-    if fallback.exists():
-        load_dotenv(dotenv_path=fallback, override=False)
-        logger.info(f"Loaded .env from fallback {fallback}")
-    else:
-        print("WARNING: No .env file found in parent directories.", file=sys.stderr)
+    print("WARNING: No .env file found in parent directories.", file=sys.stderr)
 
 _find_and_load_env()
 
