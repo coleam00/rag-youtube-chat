@@ -70,15 +70,27 @@ This will set up the Python venv, install dependencies, seed the database with 1
 
 If you prefer to run the servers separately:
 
+1. Create a `.env` file in the project root:
+
+```
+OPENROUTER_API_KEY=your-key-here
+```
+
+2. Start the backend:
+
 ```bash
-# Backend
 cd app
 python -m venv backend/.venv
 source backend/.venv/bin/activate  # or backend\.venv\Scripts\activate on Windows
 pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload --port 8000
+```
 
-# Frontend (new terminal)
+On first run, the backend automatically creates the SQLite database and seeds it with 10 sample videos (this requires your `OPENROUTER_API_KEY` to generate embeddings and may take a moment).
+
+3. Start the frontend (new terminal):
+
+```bash
 cd app/frontend
 bun install
 bun run dev
