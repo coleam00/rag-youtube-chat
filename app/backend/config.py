@@ -55,6 +55,7 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # RAG settings
 RETRIEVAL_TOP_K: int = 5
+RETRIEVAL_MIN_SCORE: float = 0.5
 HYBRID_CHUNKER_MAX_TOKENS: int = 512
 
 # Server ports

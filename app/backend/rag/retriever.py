@@ -13,6 +13,7 @@ from typing import List
 
 import numpy as np
 
+from backend.config import RETRIEVAL_MIN_SCORE
 from backend.db import repository
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 async def retrieve(
     query_embedding: List[float],
     k: int = 5,
-    min_score: float = 0.5,
+    min_score: float = RETRIEVAL_MIN_SCORE,
 ) -> List[dict]:
     """
     Find the top-K chunks most similar to *query_embedding*.
@@ -71,9 +72,10 @@ async def retrieve(
         chunk = all_chunks[int(idx)]
         score = float(scores[int(idx)])
 
-        # Skip chunks below the relevance threshold
+        # top_indices is sorted descending; once score drops below threshold,
+        # all remaining chunks will also be below — break immediately.
         if score < min_score:
-            continue
+            break
 
         video_id = chunk["video_id"]
 
