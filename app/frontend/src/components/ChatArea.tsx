@@ -231,6 +231,8 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
     if (autoScrollRef.current) scrollToBottom()
   }, [messages.length, streamingContent, scrollToBottom])
 
+  // Must be declared before the load-complete effect below; React runs effects
+  // in declaration order, so this reset is guaranteed to fire first on conversationId change.
   useEffect(() => {
     autoScrollRef.current = true
   }, [conversationId])
