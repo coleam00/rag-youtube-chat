@@ -348,7 +348,7 @@ Ingest a new video into the RAG pipeline. Accepts video metadata and transcript 
 │  ┌─────────────────────────────────────────┐                         │
 │  │   OpenRouter Embeddings API             │                         │
 │  │   openai/text-embedding-3-small        │ ──► 502 Bad Gateway     │
-│  │   Batched batched API call              │                         │
+│  │   Batched API call                      │                         │
 │  └──────┬───────────────────────────────────┘                         │
 │         │                                                             │
 │         ▼                                                             │

@@ -1,0 +1,12 @@
+# Auto-generated per-codebase Archon config.
+# DO NOT COMMIT: contains secrets.
+env:
+  ANTHROPIC_BASE_URL: "https://api.minimax.io/anthropic"
+  ANTHROPIC_AUTH_TOKEN: "sk-api-a5EMjkf35yFgjdcqJS-mUsrP8ekb6NsHw8McUCEv1S4-mLD5pkcITCWVkF8py_ugNAEBB-TdLXRv4V6fcXG3yA3pLxaOwbFcqivG286EX3xsWuBS1k_Vb9E"
+  ANTHROPIC_API_KEY: ""
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "MiniMax-M2.7"
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "MiniMax-M2.7"
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "MiniMax-M2.7-highspeed"
+  CLAUDE_CODE_SUBAGENT_MODEL: "MiniMax-M2.7"
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+  API_TIMEOUT_MS: "3000000"

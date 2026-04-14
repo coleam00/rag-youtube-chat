@@ -1,0 +1,49 @@
+name: agent-browser-smoke
+description: |
+  Token-light smoke test for the agent-browser + Archon + MiniMax stack.
+  Navigates the running RAG YouTube Chat frontend, captures a snapshot and
+  screenshots, then closes the browser. Asserts nothing — just proves the
+  browser automation chain works end-to-end from an Archon workflow.
+
+  Prereqs: backend running on port 8000, frontend running on port 5173.
+
+provider: claude
+model: sonnet
+
+nodes:
+  - id: browse
+    prompt: |
+      You are running inside an Archon workflow. Use the Bash tool to exercise
+      `agent-browser` against the RAG YouTube Chat frontend running locally.
+
+      The frontend is at http://localhost:5173. The artifacts directory is
+      available as the environment variable `$ARTIFACTS_DIR` — write all
+      screenshots there.
+
+      Run these commands in order, one at a time, checking each result:
+
+      1. `agent-browser open http://localhost:5173`
+      2. `agent-browser wait --load networkidle`
+      3. `agent-browser get title`
+      4. `agent-browser get url`
+      5. `agent-browser snapshot -i`
+      6. `agent-browser screenshot "$ARTIFACTS_DIR/home.png"`
+      7. `agent-browser screenshot --full "$ARTIFACTS_DIR/home-full.png"`
+      8. `agent-browser close`
+
+      After step 8, write a short plaintext report to
+      `$ARTIFACTS_DIR/smoke-report.txt` with these fields on separate lines:
+        title=<page title>
+        url=<final URL>
+        interactive_element_count=<count from the snapshot output>
+        screenshots=<comma-separated paths that exist>
+        status=ok  (or `status=error: <message>` if anything failed)
+
+      Then reply with one of:
+        "smoke ok" — everything worked, screenshots saved, report written
+        "smoke fail: <one line summary>" — something broke
+
+      Do not do anything else. Do not analyze the page. Do not navigate anywhere
+      else. Do not leave the browser open. Keep all terminal output brief.
+    allowed_tools: [Bash]
+    idle_timeout: 300000

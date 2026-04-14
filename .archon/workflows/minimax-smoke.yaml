@@ -1,0 +1,13 @@
+name: minimax-smoke
+description: |
+  Token-light smoke test confirming Archon workflows route through MiniMax M2.7.
+  Single prompt node, tiny output, no tools.
+
+provider: claude
+model: sonnet
+
+nodes:
+  - id: say-pong
+    prompt: |
+      Respond with exactly one word and nothing else: pong
+    allowed_tools: []
