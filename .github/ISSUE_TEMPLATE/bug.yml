@@ -1,0 +1,52 @@
+name: Bug report
+description: Report something broken in DynaChat
+title: "[Bug]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. This issue will be auto-triaged by the Dark Factory — please fill in every section so it has enough to work with. Vague issues get rejected.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, specific description of the buggy behavior.
+      placeholder: "When I click the citation for video X, the modal opens but the YouTube player is blank."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Ordered list of steps. The factory's regression test must be able to reproduce this.
+      placeholder: |
+        1. Sign in with Google
+        2. Send the message "What is RAG?"
+        3. Click the first citation
+        4. Observe blank player
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, and anything else relevant.
+      placeholder: "Chrome 147 on macOS 15"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: Paste any error messages from the UI, browser console, or server logs.
+      render: shell
+    validations:
+      required: false

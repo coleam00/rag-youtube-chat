@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions about DynaChat
+    url: https://github.com/coleam00/rag-youtube-chat/discussions
+    about: Ask questions in Discussions. Issues are only for bug reports and feature requests — questions filed as issues will be auto-rejected by triage.

@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a new capability or an improvement to an existing one
+title: "[Feature]: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check `MISSION.md` in the repo root. Anything listed under "Out of Scope" will be rejected by triage. The factory will only build features that fall inside MISSION.md's "Core Capabilities" or "Allowed Evolutions".
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: What is the user trying to do that they currently can't?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the feature as a user would experience it. What appears in the UI? What happens when they click it?
+    validations:
+      required: true
+  - type: textarea
+    id: scope-check
+    attributes:
+      label: Scope check
+      description: Which MISSION.md "Core Capability" or "Allowed Evolution" does this fall under? Quote the section if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will you know this is done? List concrete, checkable conditions the agent-browser regression test can verify.
+      placeholder: |
+        - User can rename a conversation from the sidebar
+        - Renamed title persists after reload
+        - Empty name is rejected with an inline error
+    validations:
+      required: true
