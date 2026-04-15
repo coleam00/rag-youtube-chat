@@ -24,11 +24,27 @@ def reset_cache():
 async def test_cache_populated_on_first_retrieve():
     """First retrieve() call loads and caches the embedding matrix."""
     fake_chunks = [
-        {"id": "c1", "video_id": "v1", "content": "hello", "embedding": [0.1] * 1536, "chunk_index": 0},
-        {"id": "c2", "video_id": "v1", "content": "world", "embedding": [0.2] * 1536, "chunk_index": 1},
+        {
+            "id": "c1",
+            "video_id": "v1",
+            "content": "hello",
+            "embedding": [0.1] * 1536,
+            "chunk_index": 0,
+        },
+        {
+            "id": "c2",
+            "video_id": "v1",
+            "content": "world",
+            "embedding": [0.2] * 1536,
+            "chunk_index": 1,
+        },
     ]
-    with patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list, \
-         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_get_video:
+    with (
+        patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list,
+        patch(
+            "backend.rag.retriever.repository.get_video", new_callable=AsyncMock
+        ) as mock_get_video,
+    ):
         mock_list.return_value = fake_chunks
         mock_get_video.return_value = {"id": "v1", "title": "Test Video"}
         results = await retriever.retrieve(query_embedding=[0.1] * 1536, k=5)
@@ -43,10 +59,20 @@ async def test_cache_populated_on_first_retrieve():
 async def test_cache_used_on_subsequent_retrieve():
     """Second retrieve() call uses cache without calling list_chunks()."""
     fake_chunks = [
-        {"id": "c1", "video_id": "v1", "content": "hello", "embedding": [0.1] * 1536, "chunk_index": 0},
+        {
+            "id": "c1",
+            "video_id": "v1",
+            "content": "hello",
+            "embedding": [0.1] * 1536,
+            "chunk_index": 0,
+        },
     ]
-    with patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list, \
-         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_get_video:
+    with (
+        patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list,
+        patch(
+            "backend.rag.retriever.repository.get_video", new_callable=AsyncMock
+        ) as mock_get_video,
+    ):
         mock_list.return_value = fake_chunks
         mock_get_video.return_value = {"id": "v1", "title": "Test Video"}
         # First call — populates cache
@@ -61,14 +87,36 @@ async def test_cache_used_on_subsequent_retrieve():
 async def test_cache_invalidated_after_refresh():
     """refresh_embedding_cache() clears and rebuilds the cache."""
     fake_chunks = [
-        {"id": "c1", "video_id": "v1", "content": "hello", "embedding": [0.1] * 1536, "chunk_index": 0},
+        {
+            "id": "c1",
+            "video_id": "v1",
+            "content": "hello",
+            "embedding": [0.1] * 1536,
+            "chunk_index": 0,
+        },
     ]
     new_chunks = [
-        {"id": "c1", "video_id": "v1", "content": "hello", "embedding": [0.1] * 1536, "chunk_index": 0},
-        {"id": "c2", "video_id": "v1", "content": "world", "embedding": [0.2] * 1536, "chunk_index": 1},
+        {
+            "id": "c1",
+            "video_id": "v1",
+            "content": "hello",
+            "embedding": [0.1] * 1536,
+            "chunk_index": 0,
+        },
+        {
+            "id": "c2",
+            "video_id": "v1",
+            "content": "world",
+            "embedding": [0.2] * 1536,
+            "chunk_index": 1,
+        },
     ]
-    with patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list, \
-         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_get_video:
+    with (
+        patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list,
+        patch(
+            "backend.rag.retriever.repository.get_video", new_callable=AsyncMock
+        ) as mock_get_video,
+    ):
         mock_list.return_value = fake_chunks
         mock_get_video.return_value = {"id": "v1", "title": "Test Video"}
         # Populate cache
@@ -87,10 +135,20 @@ async def test_cache_invalidated_after_refresh():
 async def test_cache_cleared_after_clear():
     """clear_embedding_cache() marks cache invalid without rebuilding."""
     fake_chunks = [
-        {"id": "c1", "video_id": "v1", "content": "hello", "embedding": [0.1] * 1536, "chunk_index": 0},
+        {
+            "id": "c1",
+            "video_id": "v1",
+            "content": "hello",
+            "embedding": [0.1] * 1536,
+            "chunk_index": 0,
+        },
     ]
-    with patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list, \
-         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_get_video:
+    with (
+        patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list,
+        patch(
+            "backend.rag.retriever.repository.get_video", new_callable=AsyncMock
+        ) as mock_get_video,
+    ):
         mock_list.return_value = fake_chunks
         mock_get_video.return_value = {"id": "v1", "title": "Test Video"}
         # Populate cache

@@ -45,9 +45,7 @@ async def refresh_embedding_cache() -> None:
     all_chunks = await repository.list_chunks()
     _cached_chunks = all_chunks
     if all_chunks:
-        _cached_matrix = np.array(
-            [chunk["embedding"] for chunk in all_chunks], dtype=np.float32
-        )
+        _cached_matrix = np.array([chunk["embedding"] for chunk in all_chunks], dtype=np.float32)
     else:
         _cached_matrix = np.empty((0, 1536), dtype=np.float32)
     _cache_valid = True
@@ -89,6 +87,8 @@ async def retrieve(
 
     # Build the matrix of stored embeddings (from cache)
     chunk_embeddings = _cached_matrix  # shape: (N, 1536)
+    if chunk_embeddings is None:
+        return []
 
     query_vec = np.array(query_embedding, dtype=np.float32)  # shape: (D,)
 
