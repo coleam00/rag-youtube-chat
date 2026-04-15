@@ -5,8 +5,8 @@ Unit tests for config module — CORS_ORIGINS parsing.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Re-import config to pick up env manipulation
 import importlib
+
 import backend.config as cfg
 
 
@@ -33,10 +34,10 @@ def test_cors_origins_default():
     """Default includes localhost variants at the configured frontend port."""
     os.environ.pop("CORS_ORIGINS", None)
     importlib.reload(cfg)
-    assert cfg.CORS_ORIGINS == [
+    assert [
         f"http://localhost:{cfg.FRONTEND_PORT}",
         f"http://127.0.0.1:{cfg.FRONTEND_PORT}",
-    ]
+    ] == cfg.CORS_ORIGINS
 
 
 def test_cors_origins_custom():
