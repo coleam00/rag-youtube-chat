@@ -84,7 +84,16 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
         "title": body.title,
         "transcript": body.transcript,
     }
-    chunk_texts: list[str] = chunk_video(video_dict)
+    try:
+        chunk_texts: list[str] = chunk_video(video_dict)
+    except Exception as exc:
+        logger.error("Chunking failed for video '%s': %s", body.title, exc)
+        # Roll back the video record to avoid orphaned record with no chunks
+        try:
+            await repository.delete_video(video_id)
+        except Exception as rollback_exc:
+            logger.error("Failed to rollback video record '%s': %s", video_id, rollback_exc)
+        raise HTTPException(status_code=500, detail=f"Chunking failed: {exc}") from exc
 
     if not chunk_texts:
         logger.warning("Chunker returned 0 chunks for video '%s'", body.title)
@@ -97,6 +106,11 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
         embeddings = embed_batch(chunk_texts)
     except Exception as exc:
         logger.error("Embedding batch failed for video '%s': %s", body.title, exc)
+        # Roll back the video record to avoid orphaned record with no chunks
+        try:
+            await repository.delete_video(video_id)
+        except Exception as rollback_exc:
+            logger.error("Failed to rollback video record '%s': %s", video_id, rollback_exc)
         raise HTTPException(
             status_code=502,
             detail=f"Embeddings API request failed: {exc}",

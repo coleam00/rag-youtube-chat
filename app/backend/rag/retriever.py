@@ -14,6 +14,7 @@ Cache:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import numpy as np
@@ -29,10 +30,18 @@ logger = logging.getLogger(__name__)
 _cached_chunks: list[dict] | None = None
 _cached_matrix: np.ndarray | None = None
 _cache_valid: bool = False
+_cache_lock: asyncio.Lock | None = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    global _cache_lock
+    if _cache_lock is None:
+        _cache_lock = asyncio.Lock()
+    return _cache_lock
 
 
 def clear_embedding_cache() -> None:
-    """Mark the embedding cache as invalid (但不重建). 下次 retrieve() 会重新加载."""
+    """Mark the embedding cache as invalid (but do not rebuild). retrieve() will reload on next call."""
     global _cache_valid
     _cache_valid = False
     logger.debug("Embedding cache marked invalid")
@@ -41,19 +50,26 @@ def clear_embedding_cache() -> None:
 async def refresh_embedding_cache() -> None:
     """Reload all chunks from SQLite and rebuild the embedding matrix."""
     global _cached_chunks, _cached_matrix, _cache_valid
+    prev_chunks, prev_matrix, prev_valid = _cached_chunks, _cached_matrix, _cache_valid
     clear_embedding_cache()
-    all_chunks = await repository.list_chunks()
-    _cached_chunks = all_chunks
-    if all_chunks:
-        _cached_matrix = np.array([chunk["embedding"] for chunk in all_chunks], dtype=np.float32)
-    else:
-        _cached_matrix = np.empty((0, 1536), dtype=np.float32)
-    _cache_valid = True
-    logger.debug(
-        "Embedding cache refreshed: %d chunks, matrix shape %s",
-        len(all_chunks),
-        _cached_matrix.shape if _cached_matrix is not None else "N/A",
-    )
+    try:
+        all_chunks = await repository.list_chunks()
+        _cached_chunks = all_chunks
+        if all_chunks:
+            _cached_matrix = np.array([chunk["embedding"] for chunk in all_chunks], dtype=np.float32)
+        else:
+            _cached_matrix = np.empty((0, 1536), dtype=np.float32)
+        _cache_valid = True
+        logger.debug(
+            "Embedding cache refreshed: %d chunks, matrix shape %s",
+            len(all_chunks),
+            _cached_matrix.shape if _cached_matrix is not None else "N/A",
+        )
+    except Exception as exc:
+        # Restore prior cache state so retrieve() can still use it
+        _cached_chunks, _cached_matrix, _cache_valid = prev_chunks, prev_matrix, prev_valid
+        logger.error("Embedding cache refresh failed, preserving prior cache: %s", exc)
+        raise
 
 
 async def retrieve(
@@ -78,9 +94,11 @@ async def retrieve(
     """
     global _cached_chunks, _cached_matrix, _cache_valid
 
-    # Lazy-load cache on first call
-    if not _cache_valid:
-        await refresh_embedding_cache()
+    # Lazy-load cache on first call, guarded by a lock to prevent concurrent refresh races
+    lock = _get_cache_lock()
+    async with lock:
+        if not _cache_valid:
+            await refresh_embedding_cache()
 
     if not _cached_chunks:
         return []
@@ -109,8 +127,12 @@ async def retrieve(
         video_id = chunk["video_id"]
 
         if video_id not in video_title_cache:
-            video = await repository.get_video(video_id)
-            video_title_cache[video_id] = video["title"] if video else "Unknown Video"
+            try:
+                video = await repository.get_video(video_id)
+                video_title_cache[video_id] = video["title"] if video else "Unknown Video"
+            except Exception as exc:
+                logger.warning("Failed to fetch video title for video_id '%s': %s", video_id, exc)
+                video_title_cache[video_id] = "Unknown Video"
 
         results.append(
             {
