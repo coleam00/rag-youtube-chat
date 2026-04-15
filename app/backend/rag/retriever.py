@@ -125,7 +125,7 @@ def _cosine_similarity_batch(
 
     # Compute row norms for the matrix
     matrix_norms: np.ndarray = np.linalg.norm(matrix, axis=1, keepdims=True)
-    # Avoid division by zero by clamping norms
+    # Avoid division by zero by clamping norms; cast to np.float32 for mypy
     matrix_norms = np.where(matrix_norms == 0, np.float32(1.0), matrix_norms)
     matrix_normalized: np.ndarray = matrix / matrix_norms
 

@@ -274,6 +274,7 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | **yes** | Authenticates embeddings and chat completions to OpenRouter |
+| `CORS_ORIGINS` | no | Comma-separated list of allowed CORS origins (default: `http://localhost:{FRONTEND_PORT},http://127.0.0.1:{FRONTEND_PORT}`) |
 
 Everything else is currently hardcoded in `config.py` (model names, ports, chunk size, top-k). When adding configurability, add the constant to `config.py` with a sensible default:
 
