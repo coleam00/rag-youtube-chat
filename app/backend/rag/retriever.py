@@ -4,6 +4,12 @@ Cosine similarity retriever — in-process NumPy-based semantic search.
 Loads all chunk embeddings from SQLite (via repository), computes cosine
 similarity against a query embedding, and returns the top-K most relevant
 chunks with their video metadata.
+
+Cache:
+    _cached_chunks, _cached_matrix, and _cache_valid are maintained at
+    module scope so the embedding matrix is loaded once and reused across
+    calls to retrieve().  Use clear_embedding_cache() to invalidate and
+    refresh_embedding_cache() to rebuild (called automatically after ingest).
 """
 
 from __future__ import annotations
@@ -15,6 +21,41 @@ import numpy as np
 from backend.db import repository
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Module-level cache (mirrors the singleton pattern in embeddings.py)
+# ---------------------------------------------------------------------------
+
+_cached_chunks: list[dict] | None = None
+_cached_matrix: np.ndarray | None = None
+_cache_valid: bool = False
+
+
+def clear_embedding_cache() -> None:
+    """Mark the embedding cache as invalid (但不重建). 下次 retrieve() 会重新加载."""
+    global _cache_valid
+    _cache_valid = False
+    logger.debug("Embedding cache marked invalid")
+
+
+async def refresh_embedding_cache() -> None:
+    """Reload all chunks from SQLite and rebuild the embedding matrix."""
+    global _cached_chunks, _cached_matrix, _cache_valid
+    clear_embedding_cache()
+    all_chunks = await repository.list_chunks()
+    _cached_chunks = all_chunks
+    if all_chunks:
+        _cached_matrix = np.array(
+            [chunk["embedding"] for chunk in all_chunks], dtype=np.float32
+        )
+    else:
+        _cached_matrix = np.empty((0, 1536), dtype=np.float32)
+    _cache_valid = True
+    logger.debug(
+        "Embedding cache refreshed: %d chunks, matrix shape %s",
+        len(all_chunks),
+        _cached_matrix.shape if _cached_matrix is not None else "N/A",
+    )
 
 
 async def retrieve(
@@ -37,15 +78,17 @@ async def retrieve(
           - score: float (cosine similarity, -1.0 to 1.0)
         Sorted by score descending. Returns [] if the DB has no chunks.
     """
-    # Load all chunks from the DB (includes deserialized embeddings)
-    all_chunks = await repository.list_chunks()
-    if not all_chunks:
+    global _cached_chunks, _cached_matrix, _cache_valid
+
+    # Lazy-load cache on first call
+    if not _cache_valid:
+        await refresh_embedding_cache()
+
+    if not _cached_chunks:
         return []
 
-    # Build the matrix of stored embeddings
-    chunk_embeddings = np.array(
-        [chunk["embedding"] for chunk in all_chunks], dtype=np.float32
-    )  # shape: (N, D)
+    # Build the matrix of stored embeddings (from cache)
+    chunk_embeddings = _cached_matrix  # shape: (N, 1536)
 
     query_vec = np.array(query_embedding, dtype=np.float32)  # shape: (D,)
 
@@ -53,7 +96,7 @@ async def retrieve(
     scores = _cosine_similarity_batch(query_vec, chunk_embeddings)  # shape: (N,)
 
     # Gather top-K indices (descending)
-    top_k = min(k, len(all_chunks))
+    top_k = min(k, len(_cached_chunks))
     top_indices = np.argpartition(scores, -top_k)[-top_k:]
     top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
 
@@ -62,7 +105,7 @@ async def retrieve(
 
     results: list[dict] = []
     for idx in top_indices:
-        chunk = all_chunks[int(idx)]
+        chunk = _cached_chunks[int(idx)]
         video_id = chunk["video_id"]
 
         if video_id not in video_title_cache:

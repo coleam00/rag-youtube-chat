@@ -17,6 +17,7 @@ from pydantic import AnyUrl, BaseModel, Field, field_validator
 from backend.db import repository
 from backend.rag.chunker import chunk_video
 from backend.rag.embeddings import embed_batch
+from backend.rag.retriever import refresh_embedding_cache
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,9 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
             embedding=embedding,
             chunk_index=idx,
         )
+
+    # 5. Refresh the embedding cache so new chunks are visible to retrieve()
+    await refresh_embedding_cache()
 
     logger.info("Ingestion complete for '%s': %d chunks stored", body.title, len(chunk_texts))
 
