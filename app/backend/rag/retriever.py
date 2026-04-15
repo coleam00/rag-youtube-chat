@@ -56,7 +56,9 @@ async def refresh_embedding_cache() -> None:
         all_chunks = await repository.list_chunks()
         _cached_chunks = all_chunks
         if all_chunks:
-            _cached_matrix = np.array([chunk["embedding"] for chunk in all_chunks], dtype=np.float32)
+            _cached_matrix = np.array(
+                [chunk["embedding"] for chunk in all_chunks], dtype=np.float32
+            )
         else:
             _cached_matrix = np.empty((0, 1536), dtype=np.float32)
         _cache_valid = True
@@ -105,8 +107,6 @@ async def retrieve(
 
     # Build the matrix of stored embeddings (from cache)
     chunk_embeddings = _cached_matrix  # shape: (N, 1536)
-    if chunk_embeddings is None:
-        return []
 
     query_vec = np.array(query_embedding, dtype=np.float32)  # shape: (D,)
 
@@ -166,16 +166,11 @@ def _cosine_similarity_batch(
     if query_norm == 0:
         return np.zeros(len(matrix), dtype=np.float32)
 
-    # Normalize the query once
+    # Normalize query and matrix rows
     query_normalized = query / query_norm
-
-    # Compute row norms for the matrix
     matrix_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    # Avoid division by zero by clamping norms
     matrix_norms = np.where(matrix_norms == 0, 1.0, matrix_norms)
     matrix_normalized = matrix / matrix_norms
 
     # Dot product of normalized vectors = cosine similarity
-    similarities = matrix_normalized @ query_normalized  # shape: (N,)
-    result: np.ndarray = similarities.astype(np.float32)
-    return result
+    return (matrix_normalized @ query_normalized).astype(np.float32)

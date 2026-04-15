@@ -245,16 +245,17 @@ async def test_concurrent_retrieve_calls_do_not_error():
     ]
     with (
         patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_list,
-        patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_get_video,
+        patch(
+            "backend.rag.retriever.repository.get_video", new_callable=AsyncMock
+        ) as mock_get_video,
     ):
         mock_list.return_value = fake_chunks
         mock_get_video.return_value = {"id": "v1", "title": "Test Video"}
 
         # Fire 10 concurrent retrieve calls with a cold cache
-        results = await asyncio.gather(*[
-            retriever.retrieve(query_embedding=[0.1] * 1536, k=5)
-            for _ in range(10)
-        ])
+        results = await asyncio.gather(
+            *[retriever.retrieve(query_embedding=[0.1] * 1536, k=5) for _ in range(10)]
+        )
 
         # All calls should succeed
         assert len(results) == 10

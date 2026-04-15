@@ -50,6 +50,19 @@ class IngestResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _rollback_video(video_id: str) -> None:
+    """Delete video record, logging failures without raising."""
+    try:
+        await repository.delete_video(video_id)
+    except Exception as exc:
+        logger.error("Failed to rollback video record '%s': %s", video_id, exc)
+
+
+# ---------------------------------------------------------------------------
 # Route handler
 # ---------------------------------------------------------------------------
 
@@ -80,19 +93,11 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
     video_id = video_record["id"]
 
     # 2. Chunk the transcript using Docling HybridChunker
-    video_dict = {
-        "title": body.title,
-        "transcript": body.transcript,
-    }
     try:
-        chunk_texts: list[str] = chunk_video(video_dict)
+        chunk_texts: list[str] = chunk_video({"title": body.title, "transcript": body.transcript})
     except Exception as exc:
         logger.error("Chunking failed for video '%s': %s", body.title, exc)
-        # Roll back the video record to avoid orphaned record with no chunks
-        try:
-            await repository.delete_video(video_id)
-        except Exception as rollback_exc:
-            logger.error("Failed to rollback video record '%s': %s", video_id, rollback_exc)
+        await _rollback_video(video_id)
         raise HTTPException(status_code=500, detail=f"Chunking failed: {exc}") from exc
 
     if not chunk_texts:
@@ -106,11 +111,7 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
         embeddings = embed_batch(chunk_texts)
     except Exception as exc:
         logger.error("Embedding batch failed for video '%s': %s", body.title, exc)
-        # Roll back the video record to avoid orphaned record with no chunks
-        try:
-            await repository.delete_video(video_id)
-        except Exception as rollback_exc:
-            logger.error("Failed to rollback video record '%s': %s", video_id, rollback_exc)
+        await _rollback_video(video_id)
         raise HTTPException(
             status_code=502,
             detail=f"Embeddings API request failed: {exc}",
