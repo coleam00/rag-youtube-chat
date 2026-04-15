@@ -7,3 +7,15 @@ Conventions (see CLAUDE.md §Testing):
 - Tests must NEVER touch `app/backend/data/chat.db`. Spin up a temp SQLite
   database per-test via the `tmp_path` fixture.
 """
+
+import pytest
+
+import backend.rag.retriever as retriever_module
+
+
+@pytest.fixture(autouse=True)
+def reset_retriever_cache():
+    """Ensure the module-level retriever cache is clean before and after every test."""
+    retriever_module._cache = None
+    yield
+    retriever_module._cache = None

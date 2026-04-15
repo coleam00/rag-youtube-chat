@@ -1,14 +1,16 @@
 """
 Cosine similarity retriever — in-process NumPy-based semantic search.
 
-Loads all chunk embeddings from SQLite (via repository), computes cosine
-similarity against a query embedding, and returns the top-K most relevant
-chunks with their video metadata.
+Loads all chunk embeddings from SQLite (via repository) on first use and on
+cache invalidation, then caches the result in memory for subsequent calls.
+Computes cosine similarity against a query embedding and returns the top-K most
+relevant chunks with their video metadata.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import numpy as np
 
@@ -17,14 +19,15 @@ from backend.db import repository
 logger = logging.getLogger(__name__)
 
 # Module-level embedding cache.  Set to None whenever new chunks are ingested.
-_cache: list[dict] | None = None
+_cache: list[dict[str, Any]] | None = None
 
 
 def invalidate_cache() -> None:
     """Discard the cached chunk list so the next retrieve() reloads from DB."""
     global _cache
+    evicted = len(_cache) if _cache else 0
     _cache = None
-    logger.info("Embedding cache invalidated.")
+    logger.info("Embedding cache invalidated (%d chunks evicted).", evicted)
 
 
 async def retrieve(

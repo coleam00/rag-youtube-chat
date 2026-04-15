@@ -5,6 +5,7 @@ Verifies:
   - cache is populated on first retrieve()
   - cache is reused on subsequent retrieve() calls (no extra DB reads)
   - invalidate_cache() clears the cache and forces a fresh DB load
+  - an empty DB result is cached (no repeated DB polls on empty library)
 """
 
 from unittest.mock import AsyncMock, patch
@@ -81,3 +82,18 @@ async def test_invalidate_cache_clears_cache_and_forces_reload():
         await retrieve([0.1, 0.2, 0.3])
 
     assert mock_lc.call_count == 2
+
+
+async def test_empty_db_result_is_cached():
+    """An empty DB result is cached; retrieve() does not poll DB on every query."""
+    retriever_module._cache = None  # ensure clean state
+
+    with patch("backend.rag.retriever.repository.list_chunks", new_callable=AsyncMock) as mock_lc:
+        mock_lc.return_value = []
+
+        result1 = await retrieve([0.1, 0.2, 0.3])
+        result2 = await retrieve([0.1, 0.2, 0.3])
+
+    assert result1 == []
+    assert result2 == []
+    assert mock_lc.call_count == 1  # not 2 — empty list is cached

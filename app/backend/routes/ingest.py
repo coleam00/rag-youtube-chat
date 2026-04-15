@@ -109,16 +109,18 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
         )
 
     # 4. Store each chunk with its embedding
-    for idx, (text, embedding) in enumerate(zip(chunk_texts, embeddings, strict=False)):
-        await repository.create_chunk(
-            video_id=video_id,
-            content=text,
-            embedding=embedding,
-            chunk_index=idx,
-        )
+    try:
+        for idx, (text, embedding) in enumerate(zip(chunk_texts, embeddings, strict=False)):
+            await repository.create_chunk(
+                video_id=video_id,
+                content=text,
+                embedding=embedding,
+                chunk_index=idx,
+            )
+    finally:
+        retriever.invalidate_cache()
 
     logger.info("Ingestion complete for '%s': %d chunks stored", body.title, len(chunk_texts))
-    retriever.invalidate_cache()
 
     return IngestResponse(
         video_id=video_id,
