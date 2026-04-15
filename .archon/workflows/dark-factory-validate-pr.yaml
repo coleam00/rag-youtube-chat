@@ -846,6 +846,30 @@ nodes:
         | map("- **\(.severity)** [\(.category)]\(if .file then " (`\(.file)`)" else "" end): \(.description)")
         | join("\n")')
 
+      # GitHub forbids reviewing your own PR (addPullRequestReview GraphQL error).
+      # When the bot identity authored the PR, fall back to posting a regular
+      # comment so the verdict is still visible. Labels and merge actions still
+      # run normally — only the formal review API call is swapped.
+      PR_AUTHOR=$(gh pr view "$PR_NUMBER" --json author -q '.author.login' 2>/dev/null || echo "")
+      BOT_LOGIN=$(gh api user -q '.login' 2>/dev/null || echo "")
+      SELF_REVIEW="false"
+      if [ -n "$PR_AUTHOR" ] && [ "$PR_AUTHOR" = "$BOT_LOGIN" ]; then
+        SELF_REVIEW="true"
+        echo "Self-review detected (PR author '$PR_AUTHOR' == bot '$BOT_LOGIN'); will post as comment instead of formal review."
+      fi
+
+      # post_review <review-flag> <body>  — review-flag is --approve/--request-changes/--comment.
+      # In self-review mode, always falls back to `gh pr comment`.
+      post_review() {
+        local flag="$1"
+        local body="$2"
+        if [ "$SELF_REVIEW" = "true" ]; then
+          gh pr comment "$PR_NUMBER" --body "$body"
+        else
+          gh pr review "$PR_NUMBER" "$flag" --body "$body"
+        fi
+      }
+
       # Multi-line PR/issue bodies are built via printf so every source line stays
       # inside the YAML block scalar's indent column (column-0 lines would terminate
       # the block early and cause a YAML parse error).
@@ -866,7 +890,7 @@ nodes:
             "- Code review: no critical/high findings" \
             "" \
             "Auto-merging via squash.")
-          gh pr review "$PR_NUMBER" --approve --body "$BODY"
+          post_review --approve "$BODY"
           gh pr merge "$PR_NUMBER" --squash --auto --delete-branch
           gh pr edit "$PR_NUMBER" --remove-label "factory:needs-review" --add-label "factory:approved" 2>/dev/null || true
           echo "PR #$PR_NUMBER: APPROVED (${PASS_LABEL}) and queued for auto-merge"
@@ -885,7 +909,7 @@ nodes:
               "" \
               "### Issues remaining" \
               "${ISSUES}")
-            gh pr review "$PR_NUMBER" --request-changes --body "$BODY"
+            post_review --request-changes "$BODY"
             gh pr edit "$PR_NUMBER" --remove-label "factory:needs-review" --add-label "factory:needs-human" 2>/dev/null || true
             echo "PR #$PR_NUMBER: ESCALATED to human after ${PASS_LABEL}"
           else
@@ -897,7 +921,7 @@ nodes:
               "" \
               "### Issues to fix" \
               "${ISSUES}")
-            gh pr review "$PR_NUMBER" --request-changes --body "$BODY"
+            post_review --request-changes "$BODY"
             gh pr edit "$PR_NUMBER" --remove-label "factory:needs-review" --add-label "factory:needs-fix" 2>/dev/null || true
             echo "PR #$PR_NUMBER: CHANGES REQUESTED (${PASS_LABEL})"
           fi
@@ -913,7 +937,7 @@ nodes:
             "${ISSUES}" \
             "" \
             "This PR cannot be fixed incrementally and has been closed.")
-          gh pr review "$PR_NUMBER" --request-changes --body "$BODY"
+          post_review --request-changes "$BODY"
           gh pr close "$PR_NUMBER"
 
           ISSUE_NUM=$(gh pr view "$PR_NUMBER" --json body -q '.body' \
