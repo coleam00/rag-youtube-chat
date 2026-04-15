@@ -1,4 +1,5 @@
 """Regression tests for the in-memory embedding cache in retriever.py."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -6,7 +7,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.rag import retriever
-
 
 FAKE_CHUNKS = [
     {
@@ -38,7 +38,9 @@ async def test_cache_populated_on_first_retrieve():
     """retrieve() loads from DB on first call and populates the cache."""
     mock_get_video = AsyncMock(return_value={"title": "Test Video"})
     with (
-        patch("backend.rag.retriever.repository.list_chunks", new=AsyncMock(return_value=FAKE_CHUNKS)),
+        patch(
+            "backend.rag.retriever.repository.list_chunks", new=AsyncMock(return_value=FAKE_CHUNKS)
+        ),
         patch("backend.rag.retriever.repository.get_video", new=mock_get_video),
     ):
         await retriever.retrieve([1.0, 0.0], k=1)
