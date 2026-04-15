@@ -106,6 +106,9 @@ async def retrieve(
         return []
 
     # Build the matrix of stored embeddings (from cache)
+    # _cached_matrix is set alongside _cached_chunks in refresh_embedding_cache,
+    # so it is guaranteed non-None when _cached_chunks is non-empty.
+    assert _cached_matrix is not None
     chunk_embeddings = _cached_matrix  # shape: (N, 1536)
 
     query_vec = np.array(query_embedding, dtype=np.float32)  # shape: (D,)
@@ -130,7 +133,7 @@ async def retrieve(
             try:
                 video = await repository.get_video(video_id)
                 video_title_cache[video_id] = video["title"] if video else "Unknown Video"
-            except Exception as exc:
+            except OSError as exc:
                 logger.warning("Failed to fetch video title for video_id '%s': %s", video_id, exc)
                 video_title_cache[video_id] = "Unknown Video"
 
@@ -173,4 +176,5 @@ def _cosine_similarity_batch(
     matrix_normalized = matrix / matrix_norms
 
     # Dot product of normalized vectors = cosine similarity
-    return (matrix_normalized @ query_normalized).astype(np.float32)
+    dot_scores: np.ndarray = np.dot(matrix_normalized, query_normalized)
+    return dot_scores.astype(np.float32)

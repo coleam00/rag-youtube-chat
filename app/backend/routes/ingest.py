@@ -58,7 +58,7 @@ async def _rollback_video(video_id: str) -> None:
     """Delete video record, logging failures without raising."""
     try:
         await repository.delete_video(video_id)
-    except Exception as exc:
+    except OSError as exc:
         logger.error("Failed to rollback video record '%s': %s", video_id, exc)
 
 

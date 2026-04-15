@@ -81,7 +81,6 @@ async def count_videos() -> int:
 async def delete_video(video_id: str) -> bool:
     """Delete a video and its associated chunks. Used for rollback on ingest failure."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA foreign_keys=ON;")
         cursor = await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
         await db.commit()
         return cursor.rowcount > 0
