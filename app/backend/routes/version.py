@@ -28,7 +28,4 @@ async def get_version() -> VersionResponse:
         ver = await asyncio.to_thread(version, "dynachat-backend")
     except PackageNotFoundError:
         ver = "0.1.0"
-    except Exception as exc:
-        logger.warning("Unexpected error reading package version: %s", exc)
-        raise
     return VersionResponse(version=ver)

@@ -3,8 +3,8 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.main import app
 import backend.routes.version as version_module
+from backend.main import app
 
 
 @pytest.mark.asyncio
