@@ -5,6 +5,7 @@ Handles lifespan startup (DB init + seeding) and route registration.
 
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import version as get_version
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,9 +73,7 @@ async def health():
 
 
 @app.get("/api/version")
-async def version():
-    from importlib.metadata import version as get_version
-
+async def version() -> dict[str, str]:
     return {"version": get_version("dynachat-backend")}
 
 
