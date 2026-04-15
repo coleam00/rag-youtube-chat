@@ -5,12 +5,14 @@ Handles lifespan startup (DB init + seeding) and route registration.
 
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from backend.config import DB_PATH
 from backend.data.seed import seed_if_empty
 from backend.db.schema import init_db
 
@@ -55,7 +57,6 @@ app.include_router(ingest.router, prefix="/api")
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
-from backend.config import DB_PATH
 from backend.db import repository  # noqa: E402
 
 
@@ -74,7 +75,10 @@ async def health():
 
 @app.get("/api/version")
 async def version() -> dict[str, str]:
-    return {"version": get_version("dynachat-backend")}
+    try:
+        return {"version": get_version("dynachat-backend")}
+    except PackageNotFoundError:
+        raise HTTPException(status_code=503, detail="Package metadata unavailable") from None
 
 
 @app.post("/api/stream-test")
