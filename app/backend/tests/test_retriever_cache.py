@@ -64,6 +64,20 @@ async def test_cache_not_reloaded_on_second_retrieve():
     assert mock_list_chunks.call_count == 1
 
 
+async def test_empty_db_returns_empty_and_does_not_cache():
+    """retrieve() returns [] and leaves cache unpopulated when DB has no chunks."""
+    with patch(
+        "backend.rag.retriever.repository.list_chunks",
+        new=AsyncMock(return_value=[]),
+    ):
+        result = await retriever.retrieve([1.0, 0.0], k=5)
+
+    assert result == []
+    # Cache must remain cold so the next call re-queries the DB
+    assert retriever._cached_chunks is None
+    assert retriever._cached_matrix is None
+
+
 async def test_cache_reloaded_after_invalidation():
     """After invalidate_embedding_cache(), retrieve() calls list_chunks() again."""
     mock_list_chunks = AsyncMock(return_value=FAKE_CHUNKS)

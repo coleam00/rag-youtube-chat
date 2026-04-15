@@ -55,15 +55,24 @@ async def retrieve(
     global _cached_chunks, _cached_matrix
 
     if _cached_chunks is None or _cached_matrix is None:
-        all_chunks = await repository.list_chunks()
-        if not all_chunks:
+        all_chunks_loaded = await repository.list_chunks()
+        if not all_chunks_loaded:
             return []
-        _cached_chunks = all_chunks
-        _cached_matrix = np.array(
-            [chunk["embedding"] for chunk in _cached_chunks], dtype=np.float32
-        )  # shape: (N, D)
+        try:
+            candidate_matrix = np.array(
+                [chunk["embedding"] for chunk in all_chunks_loaded], dtype=np.float32
+            )  # shape: (N, D)
+        except Exception:
+            # Leave globals as None so next call retries cleanly
+            _cached_chunks = None
+            _cached_matrix = None
+            raise
+        _cached_chunks = all_chunks_loaded
+        _cached_matrix = candidate_matrix
         logger.info("Embedding cache populated: %d chunks", len(_cached_chunks))
 
+    assert _cached_chunks is not None
+    assert _cached_matrix is not None
     all_chunks = _cached_chunks
     chunk_embeddings = _cached_matrix
 
