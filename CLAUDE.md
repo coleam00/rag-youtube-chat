@@ -340,6 +340,27 @@ Production transcript fetching uses **Supadata** (`SUPADATA_API_KEY`), not `yout
 2. Handle rate limits gracefully — Supadata's free tier is generous but not infinite. Back off on 429.
 3. The API key is read from `SUPADATA_API_KEY` in `config.py`; never inline the key anywhere.
 
+### Testing external APIs (Supadata, OpenRouter, anything else with a secret)
+
+**The factory does not have production API keys and will not get them.** Any PR that adds or modifies an external-API integration must ship with **mocked-boundary tests**, not live-key tests. Pattern:
+
+1. Record real responses once (you, locally, with your key) into `app/backend/tests/fixtures/<service>/<scenario>.json`. Check the fixtures into git — they're public, non-sensitive transcripts/metadata.
+2. In tests, use `httpx.MockTransport` or `respx` (for httpx-based clients) or `pytest` `monkeypatch` to short-circuit the HTTP client and return the fixture. Never hit the real API from a test.
+3. Cover the happy path, a rate-limit (429), a transient 5xx, and any service-specific quirks (for Supadata: the missing-`lang` 500 case).
+4. If a test needs a secret value to exist in `os.environ`, set it in `conftest.py` with a fake value like `"test-supadata-key"`. Never read from a real `.env`.
+
+**PR acceptance for external-API work requires a "Manual smoke-test" section in the PR body** listing exactly what a human will run on the prod host after merge. Example:
+
+```
+## Manual smoke-test (post-merge)
+On /opt/dynachat host:
+1. `curl -X POST https://chat.dynamous.ai/api/ingest -d '{"video_id": "dQw4w9WgXcQ"}'`
+2. Confirm transcript lands in `chunks` table: `psql -U dynachat -c 'SELECT count(*) FROM chunks WHERE video_id = ...'`
+3. Ask a question about the ingested video in the chat UI; verify citations deep-link correctly
+```
+
+This is the sole place where production-only verification happens. The factory is never the entity running that smoke-test.
+
 ### Redeploy flow
 
 After a merge to `main` on prod, the deploy is (for now) manual:
