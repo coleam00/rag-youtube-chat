@@ -254,6 +254,11 @@ body,
   color: #94a3b8;
 }
 
+/* ── Video card hover ──────────────────────────────────────────── */
+.video-card-hover {
+  border-color: #3b82f6;
+}
+
 /* ── Code block wrapper ─────────────────────────────────────────── */
 .code-block-wrapper {
   position: relative;
