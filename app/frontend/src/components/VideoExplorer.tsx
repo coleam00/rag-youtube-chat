@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type Video, getVideos } from '../lib/api';
+import { type Video, getVideos, ingestVideo } from '../lib/api';
 
 // ── Skeleton card ────────────────────────────────────────────────
 function SkeletonCard() {
@@ -110,6 +110,10 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ingestOpen, setIngestOpen] = useState(false);
+  const [ingestForm, setIngestForm] = useState({ title: '', description: '', url: '', transcript: '' });
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestError, setIngestError] = useState<string | null>(null);
 
   const fetchVideos = useCallback(async () => {
     setLoading(true);
@@ -123,6 +127,26 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
       setLoading(false);
     }
   }, []);
+
+  const handleIngest = async () => {
+    if (!ingestForm.title || !ingestForm.description || !ingestForm.url || !ingestForm.transcript) {
+      setIngestError('All fields are required.');
+      return;
+    }
+    setIngesting(true);
+    setIngestError(null);
+    try {
+      await ingestVideo(ingestForm);
+      const updated = await getVideos();
+      setVideos(updated);
+      setIngestOpen(false);
+      setIngestForm({ title: '', description: '', url: '', transcript: '' });
+    } catch (e) {
+      setIngestError(e instanceof Error ? e.message : 'Failed to add video.');
+    } finally {
+      setIngesting(false);
+    }
+  };
 
   // Load videos when panel opens
   useEffect(() => {
@@ -236,6 +260,22 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
               <line x1="11" y1="3" x2="3" y2="11" />
             </svg>
           </button>
+          <button
+            onClick={() => setIngestOpen(true)}
+            style={{
+              padding: '6px 12px',
+              background: '#3b82f6',
+              border: 'none',
+              borderRadius: 6,
+              color: '#fff',
+              fontSize: 13,
+              cursor: 'pointer',
+              marginRight: 8,
+            }}
+            title="Add new video"
+          >
+            + Add Video
+          </button>
         </div>
 
         {/* Content */}
@@ -316,6 +356,123 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
 
           {!loading && !error && videos.map((video) => <VideoCard key={video.id} video={video} />)}
         </div>
+
+        {/* Ingest dialog */}
+        {ingestOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.6)',
+              zIndex: 50,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                background: '#1e293b',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 12,
+                padding: 24,
+                width: 420,
+                maxWidth: 'calc(100vw - 48px)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ color: '#f1f5f9', fontSize: 16, fontWeight: 600, margin: 0 }}>Add New Video</h3>
+                <button
+                  onClick={() => { setIngestOpen(false); setIngestError(null); }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18 }}
+                >
+                  ×
+                </button>
+              </div>
+              {ingestError && (
+                <div style={{ color: '#f87171', marginBottom: 12, fontSize: 13 }}>{ingestError}</div>
+              )}
+              {[
+                { key: 'title', label: 'Title', placeholder: 'Video title', type: 'text' },
+                { key: 'description', label: 'Description', placeholder: 'Short description', type: 'text' },
+                { key: 'url', label: 'YouTube URL', placeholder: 'https://www.youtube.com/watch?v=...', type: 'url' },
+                { key: 'transcript', label: 'Transcript', placeholder: 'Full transcript text...', type: 'textarea' },
+              ].map(({ key, label, placeholder, type }) => (
+                <div key={key} style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: 12, marginBottom: 4 }}>{label}</label>
+                  {type === 'textarea' ? (
+                    <textarea
+                      value={ingestForm[key as keyof typeof ingestForm]}
+                      onChange={(e) => setIngestForm({ ...ingestForm, [key]: e.target.value })}
+                      placeholder={placeholder}
+                      rows={4}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: '#0f172a',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 6,
+                        color: '#f1f5f9',
+                        fontSize: 14,
+                        boxSizing: 'border-box',
+                        resize: 'vertical',
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type={type}
+                      value={ingestForm[key as keyof typeof ingestForm]}
+                      onChange={(e) => setIngestForm({ ...ingestForm, [key]: e.target.value })}
+                      placeholder={placeholder}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: '#0f172a',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 6,
+                        color: '#f1f5f9',
+                        fontSize: 14,
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+                <button
+                  onClick={() => { setIngestOpen(false); setIngestError(null); }}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: 6,
+                    color: '#94a3b8',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleIngest}
+                  disabled={ingesting}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#3b82f6',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: '#fff',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    opacity: ingesting ? 0.75 : 1,
+                  }}
+                >
+                  {ingesting ? 'Adding…' : 'Add Video'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

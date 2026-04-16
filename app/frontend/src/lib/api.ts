@@ -58,6 +58,25 @@ export const deleteConversation = (id: string) =>
 // Videos
 export const getVideos = () => request<Video[]>('/videos');
 
+export interface IngestVideoBody {
+  title: string;
+  description: string;
+  url: string;
+  transcript: string;
+}
+
+export interface IngestVideoResponse {
+  video_id: string;
+  chunks_created: number;
+  status: string;
+}
+
+export const ingestVideo = (body: IngestVideoBody) =>
+  request<IngestVideoResponse>('/ingest', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
 // Health
 export const getHealth = () =>
   request<{ status: string; video_count: number; chunk_count: number; db_path: string }>('/health');
