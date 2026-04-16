@@ -135,13 +135,36 @@ nodes:
     depends_on: [validate]
     context: fresh
 
+  # Deterministic fallback: if the AI did not write .pr-number, extract it
+  # from the current branch. This fixes #13 where review-scope received the
+  # issue number instead of the PR number.
+  - id: capture-pr-number
+    bash: |
+      set -euo pipefail
+      if [ -f "$ARTIFACTS_DIR/.pr-number" ]; then
+        PR=$(cat "$ARTIFACTS_DIR/.pr-number" | tr -d ' \n')
+        if echo "$PR" | grep -qE '^[0-9]+$'; then
+          echo "PR number already captured: $PR"
+          exit 0
+        fi
+      fi
+      PR=$(gh pr view --json number -q '.number' 2>/dev/null || true)
+      if [ -z "$PR" ]; then
+        echo "WARNING: could not determine PR number from current branch" >&2
+        exit 0
+      fi
+      echo "$PR" > "$ARTIFACTS_DIR/.pr-number"
+      echo "Captured PR number: $PR"
+    depends_on: [create-pr]
+    timeout: 15000
+
   # ═══════════════════════════════════════════════════════════════
   # PHASE 7: REVIEW
   # ═══════════════════════════════════════════════════════════════
 
   - id: review-scope
     command: archon-pr-review-scope
-    depends_on: [create-pr]
+    depends_on: [capture-pr-number]
     context: fresh
 
   - id: review-classify
