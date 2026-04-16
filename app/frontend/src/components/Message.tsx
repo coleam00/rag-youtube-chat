@@ -130,7 +130,7 @@ export function Message({ role, content, isStreaming, sources }: MessageProps) {
         ) : (
           <>
             <MarkdownRenderer content={content} />
-            {hasSources && <SourceCitations sources={sources!} />}
+            {hasSources && <SourceCitations sources={sources} />}
           </>
         )}
       </div>
