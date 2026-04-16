@@ -298,7 +298,7 @@ NEW_CONSTANT: int = int(os.environ.get("NEW_CONSTANT", "42"))
 ```
 /opt/dynachat/                     # root:root 700
 ├── .env                           # root:root 600 — real secrets, never committed
-└── rag-youtube-chat/              # git clone of this repo
+└── app/                           # git clone of this repo
     └── deploy/
         ├── docker-compose.yml     # Caddy + Postgres (+ app service, TODO)
         ├── Caddyfile              # TLS + subdomain routing
@@ -367,7 +367,7 @@ After a merge to `main` on prod, the deploy is (for now) manual:
 
 ```bash
 ssh archon@<factory-vps>
-sudo -u root bash -c 'cd /opt/dynachat/rag-youtube-chat && git pull && cd deploy && docker compose --env-file /opt/dynachat/.env up -d'
+sudo -u root bash -c 'cd /opt/dynachat/app && git pull && cd deploy && docker compose --env-file /opt/dynachat/.env up -d'
 ```
 
 A full CI/CD path (webhook → pull → compose up) is in the backlog. Until then, the factory's job ends at merging a green PR; actual rollout is a human step.
