@@ -1,18 +1,28 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatArea } from '../components/ChatArea';
 import * as useMessagesModule from '../hooks/useMessages';
 import * as useStreamingResponseModule from '../hooks/useStreamingResponse';
 import * as useToastModule from '../hooks/useToast';
 
-// Mock the hooks
-vi.mock('../hooks/useMessages');
-vi.mock('../hooks/useStreamingResponse');
-vi.mock('../hooks/useToast');
+// Mock the hooks with factories
+vi.mock('../hooks/useMessages', () => ({
+  useMessages: vi.fn(),
+}));
+
+vi.mock('../hooks/useStreamingResponse', () => ({
+  useStreamingResponse: vi.fn(),
+}));
+
+vi.mock('../hooks/useToast', () => ({
+  useToast: vi.fn(),
+}));
 
 describe('ChatArea', () => {
   const mockUseMessages = useMessagesModule.useMessages as ReturnType<typeof vi.fn>;
-  const mockUseStreamingResponse = useStreamingResponseModule.useStreamingResponse as ReturnType<typeof vi.fn>;
+  const mockUseStreamingResponse = useStreamingResponseModule.useStreamingResponse as ReturnType<
+    typeof vi.fn
+  >;
   const mockUseToast = useToastModule.useToast as ReturnType<typeof vi.fn>;
 
   const mockAddToast = vi.fn();
@@ -59,9 +69,9 @@ describe('ChatArea', () => {
         'What is the difference between fine-tuning and prompting?',
       ];
 
-      starters.forEach((starter) => {
+      for (const starter of starters) {
         expect(screen.getByText(starter)).toBeInTheDocument();
-      });
+      }
     });
 
     it('does not show EmptyState when a conversationId is provided', () => {
@@ -135,7 +145,9 @@ describe('ChatArea', () => {
       render(<ChatArea conversationId="conv-1" />);
 
       // Find and fill the textarea
-      const textarea = screen.getByPlaceholderText('Ask anything about the video library…') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText(
+        'Ask anything about the video library…',
+      ) as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'Hello' } });
 
       // Click send
@@ -216,7 +228,9 @@ describe('ChatArea', () => {
       render(<ChatArea conversationId="conv-1" />);
 
       // Type and send a message
-      const textarea = screen.getByPlaceholderText('Ask anything about the video library…') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText(
+        'Ask anything about the video library…',
+      ) as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'Hello' } });
       fireEvent.click(screen.getByLabelText('Send message'));
 
@@ -248,7 +262,9 @@ describe('ChatArea', () => {
 
       render(<ChatArea conversationId="conv-1" />);
 
-      const textarea = screen.getByPlaceholderText('Ask anything about the video library…') as HTMLTextAreaElement;
+      const textarea = screen.getByPlaceholderText(
+        'Ask anything about the video library…',
+      ) as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'Hello' } });
       fireEvent.click(screen.getByLabelText('Send message'));
 

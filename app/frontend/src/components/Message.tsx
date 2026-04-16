@@ -123,7 +123,7 @@ export function Message({ role, content, isStreaming, sources }: MessageProps) {
           wordBreak: 'break-word',
         }}
       >
-        {isStreaming && !content ? (
+        {isStreaming && !content && !isUser ? (
           <TypingIndicator />
         ) : isUser ? (
           <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>

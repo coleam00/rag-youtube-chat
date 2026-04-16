@@ -5,6 +5,21 @@ export interface StreamResult {
   sources: string[];
 }
 
+/**
+
+ * Starts a streaming response for the given conversation.
+
+ * @param conversationId - The conversation ID
+
+ * @param userMessage - The user's message
+
+ * @param onComplete - Called with fullText and sources when stream completes successfully
+
+ * @throws {Error} Re-throws non-AbortError exceptions (network failures, server errors)
+
+ * @remarks AbortError is silently swallowed when cancelStream() is called
+
+ */
 export function useStreamingResponse() {
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [streamingSources, setStreamingSources] = useState<string[]>([]);
@@ -83,8 +98,9 @@ export function useStreamingResponse() {
                   sources = parsed;
                   setStreamingSources(parsed);
                 }
-              } catch {
-                // Ignore malformed sources
+              } catch (parseErr) {
+                console.error('[useStreamingResponse] Failed to parse sources event:', parseErr);
+                // Sources are supplementary — continue without them rather than failing
               }
             } else if (data === '[DONE]') {
               // Stream complete — no action needed here
@@ -122,6 +138,8 @@ export function useStreamingResponse() {
         if (e instanceof Error && e.name === 'AbortError') {
           return;
         }
+        // Log for debugging before re-throwing to ChatArea's catch block
+        console.error('[useStreamingResponse] Stream error:', e);
         // Server errors (e.g., {"error": ...} mid-stream) are re-thrown to ChatArea's catch block.
         throw e;
       } finally {

@@ -229,7 +229,8 @@ interface ChatAreaProps {
 
 export function ChatArea({ conversationId }: ChatAreaProps) {
   const { messages, setMessages, loading, error } = useMessages(conversationId || null);
-  const { streamingContent, streamingSources, isStreaming, startStream } = useStreamingResponse();
+  const { streamingContent, streamingSources, isStreaming, startStream, cancelStream } =
+    useStreamingResponse();
   const { addToast } = useToast();
 
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -258,6 +259,13 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
       setTimeout(() => scrollToBottom('instant' as ScrollBehavior), 50);
     }
   }, [loading, scrollToBottom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cancel in-flight stream on unmount or conversation switch
+  useEffect(() => {
+    return () => {
+      cancelStream();
+    };
+  }, [conversationId, cancelStream]);
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -393,7 +401,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
 
         {showMessages && (
           <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column' }}>
-            {messages.length === 0 && !inlineError ? (
+            {messages.length === 0 && !inlineError && !conversationId ? (
               <EmptyState onStarterClick={handleStarterClick} />
             ) : (
               messages.map((msg) => (
