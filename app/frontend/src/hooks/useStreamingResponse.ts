@@ -105,7 +105,6 @@ export function useStreamingResponse() {
             } else if (data === '[DONE]') {
               // Stream complete — no action needed here
             } else if (data.startsWith('{"error"')) {
-              // Server sent an error payload mid-stream
               let errMsg = 'Stream error from server';
               try {
                 errMsg = JSON.parse(data).error || errMsg;
@@ -114,15 +113,12 @@ export function useStreamingResponse() {
               }
               throw new Error(errMsg);
             } else if (data) {
-              // Tokens are JSON-encoded strings to safely handle newlines/special chars
-              let token = data;
+              let token: string;
               try {
                 const parsed = JSON.parse(data);
-                if (typeof parsed === 'string') {
-                  token = parsed;
-                }
+                token = typeof parsed === 'string' ? parsed : data;
               } catch {
-                // Not JSON-encoded — use raw data (backward compat)
+                token = data;
               }
               fullText += token;
               setStreamingContent(fullText);
