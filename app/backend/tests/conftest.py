@@ -121,7 +121,7 @@ class _FakeConn:
 
 
 class _FakePool:
-    async def acquire(self):
+    def acquire(self):
         return _FakeConn()
 
     async def __aenter__(self):
