@@ -1,12 +1,15 @@
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { AuthError } from '../lib/authApi';
+
+type FormErrorKind = 'error' | 'warning';
 
 export function Signup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<{ kind: FormErrorKind; msg: string } | null>(null);
 
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -15,7 +18,7 @@ export function Signup() {
     e.preventDefault();
     setFormError(null);
     if (password.length < 8) {
-      setFormError('Password must be at least 8 characters');
+      setFormError({ kind: 'error', msg: 'Password must be at least 8 characters' });
       return;
     }
     setSubmitting(true);
@@ -23,8 +26,14 @@ export function Signup() {
       await signup(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Signup failed';
-      setFormError(msg);
+      // 429 from signup rate-limit is a soft "try again later" — render it as
+      // a yellow warning rather than a red error so real users aren't scared.
+      if (err instanceof AuthError && err.status === 429 && err.rateLimitScope) {
+        setFormError({ kind: 'warning', msg: err.message });
+      } else {
+        const msg = err instanceof Error ? err.message : 'Signup failed';
+        setFormError({ kind: 'error', msg });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -60,9 +69,22 @@ export function Signup() {
             className="mt-1 w-full px-3 py-2 rounded bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
           />
         </label>
-        {formError && (
+        {formError && formError.kind === 'error' && (
           <div className="text-sm text-[var(--danger)]" role="alert">
-            {formError}
+            {formError.msg}
+          </div>
+        )}
+        {formError && formError.kind === 'warning' && (
+          <div
+            className="text-sm rounded px-3 py-2 border"
+            role="alert"
+            style={{
+              color: 'var(--warning)',
+              backgroundColor: 'var(--warning-bg)',
+              borderColor: 'var(--warning-border)',
+            }}
+          >
+            {formError.msg}
           </div>
         )}
         <button

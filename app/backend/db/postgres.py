@@ -53,6 +53,31 @@ CREATE INDEX IF NOT EXISTS user_messages_user_id_created_at_idx
 """
 
 
+SIGNUP_ATTEMPTS_SCHEMA = """
+CREATE EXTENSION IF NOT EXISTS citext;
+
+-- Audit trail for signup rate-limiting (issue #54).
+-- Per-IP limit counts only `accepted` rows; the global cap counts everything
+-- except `invalid` (which is never written today — Pydantic 400s short-circuit
+-- before the handler). Full IPs retained for forensics; future issue may add
+-- a pruning job. `email_attempted` is nullable to accommodate malformed bodies.
+CREATE TABLE IF NOT EXISTS signup_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ip INET NOT NULL,
+    email_attempted CITEXT,
+    outcome TEXT NOT NULL CHECK (outcome IN (
+        'accepted','ip_limited','global_limited','duplicate','invalid'
+    )),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS signup_attempts_ip_created_at_idx
+    ON signup_attempts (ip, created_at DESC);
+CREATE INDEX IF NOT EXISTS signup_attempts_created_at_idx
+    ON signup_attempts (created_at DESC);
+"""
+
+
 async def init_pg_pool() -> asyncpg.Pool:
     """Create the asyncpg pool if not already created. Idempotent."""
     global _pool
@@ -97,3 +122,11 @@ async def init_users_schema() -> None:
     async with pool.acquire() as conn:
         await conn.execute(USERS_SCHEMA)
     logger.info("Users schema ready.")
+
+
+async def init_signup_attempts_schema() -> None:
+    """Run the signup_attempts migration. Idempotent."""
+    pool = await init_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(SIGNUP_ATTEMPTS_SCHEMA)
+    logger.info("Signup-attempts schema ready.")

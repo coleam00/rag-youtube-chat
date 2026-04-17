@@ -20,7 +20,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/tes
 import pytest
 
 import backend.rag.retriever as retriever_module
-from backend import rate_limit
+from backend import rate_limit, signup_rate_limit
 
 
 @pytest.fixture(autouse=True)
@@ -79,3 +79,70 @@ def patch_rate_limit(monkeypatch, message_store):
 
     monkeypatch.setattr(rate_limit, "check_and_record", fake_check_and_record)
     monkeypatch.setattr(rate_limit, "get_status", fake_get_status)
+
+
+class _FakeConn:
+    """No-op connection for tests that go through the signup route.
+
+    The real route opens `pool.acquire() → conn.transaction()` and passes the
+    connection into `signup_rate_limit.check/.record` and `users_repo.create_user`.
+    All three are monkeypatched by the test suite, so the connection is never
+    actually used — but the context-manager plumbing still needs to succeed.
+    """
+
+    async def execute(self, *args, **kwargs):
+        return None
+
+    def transaction(self):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakePool:
+    def acquire(self):
+        return self
+
+    async def __aenter__(self):
+        return _FakeConn()
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.fixture(autouse=True)
+def patch_pg_pool(monkeypatch):
+    """Return a no-op pool so `pool.acquire()`/`conn.transaction()` succeed in tests."""
+    from backend.db import postgres as pg
+    from backend.routes import auth as auth_route
+
+    fake = _FakePool()
+    monkeypatch.setattr(pg, "get_pg_pool", lambda: fake)
+    monkeypatch.setattr(auth_route, "get_pg_pool", lambda: fake)
+
+
+@pytest.fixture(autouse=True)
+def patch_signup_rate_limit(monkeypatch):
+    """Permissive stub for `signup_rate_limit.check` and `.record`.
+
+    Most test suites (test_auth.py, test_rate_limit.py, etc.) sign up multiple
+    users per test and would trip the real 1/IP/hr limit. This stub
+    short-circuits both functions to no-ops so those suites are unaffected.
+
+    Tests in `test_signup_rate_limit.py` opt OUT of this fixture by providing
+    their own override that restores the real implementation (exercised
+    against a real Postgres).
+    """
+
+    async def fake_check(ip, conn):
+        return None
+
+    async def fake_record(conn, ip, email_attempted, outcome):
+        return None
+
+    monkeypatch.setattr(signup_rate_limit, "check", fake_check)
+    monkeypatch.setattr(signup_rate_limit, "record", fake_record)

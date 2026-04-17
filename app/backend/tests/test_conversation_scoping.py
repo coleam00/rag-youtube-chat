@@ -48,7 +48,7 @@ def fake_users_repo(monkeypatch):
     """Replace the Postgres-backed users_repo with an in-memory dict."""
     store: dict[str, dict[str, Any]] = {}
 
-    async def create_user(email: str, password_hash: str) -> dict[str, Any]:
+    async def create_user(email: str, password_hash: str, **kwargs: Any) -> dict[str, Any]:
         import asyncpg
 
         email_lower = email.lower()

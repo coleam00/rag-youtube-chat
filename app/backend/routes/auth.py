@@ -12,15 +12,17 @@ import logging
 from typing import Any
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
-from backend import rate_limit
+from backend import rate_limit, signup_rate_limit
 from backend.auth.dependencies import COOKIE_NAME, get_current_user
 from backend.auth.password import hash_password, verify_password
 from backend.auth.tokens import encode_token
 from backend.config import JWT_EXPIRY_SECONDS
 from backend.db import users_repo
+from backend.db.postgres import get_pg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -74,16 +76,74 @@ def _user_to_response(user: dict[str, Any]) -> UserResponse:
     return UserResponse(id=str(user["id"]), email=str(user["email"]))
 
 
+def _client_ip(request: Request) -> str:
+    """Return the real client IP.
+
+    With uvicorn's `--proxy-headers --forwarded-allow-ips="*"`, Starlette has
+    already rewritten `request.client` to the left-most `X-Forwarded-For`
+    value set by Caddy. We don't hand-parse the header in application code —
+    the trust boundary is declared once, at process boot. See
+    `signup_rate_limit.py` docstring for the threat model.
+    """
+    return request.client.host if request.client else "0.0.0.0"
+
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
-async def signup(body: SignupRequest, response: Response) -> UserResponse:
-    """Create a user, set session cookie, return {id, email}. 409 on duplicate email."""
-    password_hash = hash_password(body.password)
-    try:
-        user = await users_repo.create_user(email=body.email, password_hash=password_hash)
-    except asyncpg.UniqueViolationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        ) from exc
+async def signup(
+    body: SignupRequest, request: Request, response: Response
+) -> UserResponse | JSONResponse:
+    """Create a user, set session cookie, return {id, email}.
+
+    Order: rate-limit check → bcrypt → insert. Rate-limit is cheapest, runs
+    first so bots can't burn CPU via repeated 429'd calls. Every attempt is
+    audited to `signup_attempts` with its final outcome.
+
+    Returns 429 on rate-limit (per-IP wins over global — more specific error),
+    409 on duplicate email, 201 with session cookie on success.
+    """
+    ip = _client_ip(request)
+    pool = get_pg_pool()
+
+    async with pool.acquire() as conn, conn.transaction():
+        try:
+            await signup_rate_limit.check(ip, conn)
+        except signup_rate_limit.SignupRateLimited as exc:
+            outcome = "ip_limited" if exc.scope == "ip" else "global_limited"
+            await signup_rate_limit.record(
+                conn, ip=ip, email_attempted=body.email, outcome=outcome
+            )
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "error": "signup_rate_limited",
+                    "message": exc.message,
+                    "scope": exc.scope,
+                },
+            )
+
+        password_hash = hash_password(body.password)
+        try:
+            user = await users_repo.create_user(
+                email=body.email, password_hash=password_hash, conn=conn
+            )
+        except asyncpg.UniqueViolationError as exc:
+            # The user insert that raised left the transaction in an aborted
+            # state (asyncpg's savepoint semantics). Record the duplicate on
+            # a fresh connection so the audit row still lands; the outer txn
+            # will roll back harmlessly.
+            pool_for_record = get_pg_pool()
+            async with pool_for_record.acquire() as record_conn:
+                await signup_rate_limit.record(
+                    record_conn, ip=ip, email_attempted=body.email, outcome="duplicate"
+                )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+            ) from exc
+
+        await signup_rate_limit.record(
+            conn, ip=ip, email_attempted=body.email, outcome="accepted"
+        )
+
     _set_session_cookie(response, str(user["id"]))
     return _user_to_response(user)
 

@@ -10,14 +10,26 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+import asyncpg
+
 from backend.db.postgres import get_pg_pool
 
 
-async def create_user(email: str, password_hash: str) -> dict[str, Any]:
-    """Insert a new user. Raises asyncpg.UniqueViolationError on duplicate email."""
-    pool = get_pg_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
+async def create_user(
+    email: str,
+    password_hash: str,
+    *,
+    conn: asyncpg.Connection | None = None,
+) -> dict[str, Any]:
+    """Insert a new user. Raises asyncpg.UniqueViolationError on duplicate email.
+
+    If `conn` is supplied the caller owns the transaction (used by the signup
+    handler so the user insert and the rate-limit audit row commit together
+    under the same advisory lock). Otherwise grab a pool connection.
+    """
+
+    async def _insert(c: asyncpg.Connection) -> dict[str, Any]:
+        row = await c.fetchrow(
             """
             INSERT INTO users (email, password_hash)
             VALUES ($1, $2)
@@ -26,8 +38,15 @@ async def create_user(email: str, password_hash: str) -> dict[str, Any]:
             email,
             password_hash,
         )
-    assert row is not None  # RETURNING always yields a row on successful INSERT
-    return dict(row)
+        assert row is not None  # RETURNING always yields a row on successful INSERT
+        return dict(row)
+
+    if conn is not None:
+        return await _insert(conn)
+
+    pool = get_pg_pool()
+    async with pool.acquire() as new_conn:
+        return await _insert(new_conn)
 
 
 async def get_user_by_email(email: str) -> dict[str, Any] | None:

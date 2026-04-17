@@ -17,6 +17,9 @@
   --assistant-bubble: #1e293b;
   --success: #10b981;
   --danger: #ef4444;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --warning-border: rgba(245, 158, 11, 0.35);
 }
 
 * {

@@ -134,7 +134,7 @@ async def fresh_sqlite_schema():
 def fake_users_repo(monkeypatch):
     store: dict[str, dict[str, Any]] = {}
 
-    async def create_user(email: str, password_hash: str) -> dict[str, Any]:
+    async def create_user(email: str, password_hash: str, **kwargs: Any) -> dict[str, Any]:
         import asyncpg
 
         for u in store.values():

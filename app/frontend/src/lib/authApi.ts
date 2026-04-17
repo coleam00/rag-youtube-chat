@@ -29,11 +29,20 @@ export interface AuthMeResponse extends AuthUser {
   rate_window_resets_at: string | null;
 }
 
+/**
+ * Scope of a signup 429. `"ip"` = this visitor just signed up; `"global"` =
+ * the whole service is throttling. The frontend uses this to pick the copy.
+ */
+export type SignupRateLimitScope = 'ip' | 'global';
+
 export class AuthError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Present only when the backend returned a structured 429 for signup. */
+  rateLimitScope?: SignupRateLimitScope;
+  constructor(status: number, message: string, rateLimitScope?: SignupRateLimitScope) {
     super(message);
     this.status = status;
+    this.rateLimitScope = rateLimitScope;
   }
 }
 
@@ -45,13 +54,19 @@ async function authRequest<T>(path: string, init: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let detail = res.statusText;
+    let scope: SignupRateLimitScope | undefined;
     try {
       const body = await res.json();
-      if (body?.detail) detail = body.detail;
+      if (body?.error === 'signup_rate_limited' && typeof body?.message === 'string') {
+        detail = body.message;
+        if (body.scope === 'ip' || body.scope === 'global') scope = body.scope;
+      } else if (body?.detail) {
+        detail = body.detail;
+      }
     } catch {
       // fall through with statusText
     }
-    throw new AuthError(res.status, detail);
+    throw new AuthError(res.status, detail, scope);
   }
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;

@@ -481,4 +481,7 @@ Any PR touching them must be human-authored:
 - `app/backend/rate_limit.py` — implements MISSION §10 invariant #1 (25 msg/user/24h cap, hardcoded)
 - `app/backend/db/user_messages_repo.py` — audit-table access for the rate-limit counter
 - `app/backend/routes/messages.py` — the rate-limit enforcement call site (also listed above for owner-only conversations)
+- `app/backend/signup_rate_limit.py` — signup abuse guard (1/IP/hr + 25 global/10min, hardcoded; see issue #54)
+- `app/backend/db/signup_attempts_repo.py` — audit-table access for the signup rate-limiter
+- `deploy/Dockerfile` — uvicorn `--proxy-headers --forwarded-allow-ips="*"` flags; signup IP trust boundary depends on these (see module docstring in `signup_rate_limit.py`)
 - `MISSION.md` §10 invariant #1 (the cap value itself — 25 is not configurable)

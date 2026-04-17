@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.auth.dependencies import get_current_user
 from backend.config import DATABASE_URL, DB_PATH
 from backend.data.seed import seed_if_empty
-from backend.db.postgres import close_pg_pool, init_users_schema
+from backend.db.postgres import close_pg_pool, init_signup_attempts_schema, init_users_schema
 from backend.db.schema import init_db
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     if DATABASE_URL:
         logger.info("DATABASE_URL set — initialising Postgres users schema…")
         await init_users_schema()
+        await init_signup_attempts_schema()
     else:
         logger.warning("DATABASE_URL not set; auth endpoints will fail until configured.")
     logger.info("Database ready. Checking seed data…")

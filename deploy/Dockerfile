@@ -72,4 +72,14 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)" || exit 1
 
 # Run from /app so the `backend.main:app` module path resolves.
-CMD ["uv", "--project", "backend", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# `--proxy-headers --forwarded-allow-ips="*"` tells Starlette to rewrite
+# `request.client.host` from the left-most `X-Forwarded-For` value. Safe here
+# because the app container does NOT publish a host port in compose (only
+# Caddy reaches uvicorn, on the internal Docker network). If anyone ever adds
+# `ports: - "8000:8000"` to this service, IP spoofing becomes possible and
+# signup_rate_limit.py's per-IP cap can be bypassed. See signup_rate_limit.py
+# module docstring for the full trust-boundary argument.
+CMD ["uv", "--project", "backend", "run", "uvicorn", "backend.main:app", \
+     "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]
