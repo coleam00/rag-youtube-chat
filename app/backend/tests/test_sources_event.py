@@ -9,7 +9,6 @@ The SSE event emission itself is tested via integration tests in test_ingest_cac
 which validate the full streaming stack against mocked dependencies.
 """
 
-import pytest
 
 from backend.routes.messages import _format_context
 
@@ -152,5 +151,5 @@ class TestCitationObjectShape:
             "snippet": "s",
             "score": 0.9,
         }
-        assert isinstance(citation["start_seconds"], (int, float))
-        assert isinstance(citation["end_seconds"], (int, float))
+        assert isinstance(citation["start_seconds"], int | float)
+        assert isinstance(citation["end_seconds"], int | float)

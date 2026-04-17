@@ -8,7 +8,6 @@ Verifies:
   - chunk_video_fallback evenly distributes estimated duration across chunks
 """
 
-import pytest
 from backend.rag.chunker import chunk_video_fallback, chunk_video_timestamped
 
 
