@@ -64,10 +64,13 @@ rag-youtube-chat/
 │   │   │   ├── chunker.py    # Docling HybridChunker wrapper
 │   │   │   ├── embeddings.py # embed_text / embed_batch via OpenRouter
 │   │   │   └── retriever.py  # NumPy cosine similarity top-k
-│   │   └── routes/
-│   │       ├── conversations.py # GET/POST/DELETE /api/conversations*, GET /api/videos
-│   │       ├── messages.py      # POST /api/conversations/{id}/messages (streaming SSE)
-│   │       └── ingest.py        # POST /api/ingest
+│   │   ├── routes/
+│   │   │   ├── channels.py      # POST /api/channels/sync, GET /api/channels/sync-runs
+│   │   │   ├── conversations.py # GET/POST/DELETE /api/conversations*, GET /api/videos
+│   │   │   ├── messages.py      # POST /api/conversations/{id}/messages (streaming SSE)
+│   │   │   └── ingest.py        # POST /api/ingest
+│   │   └── services/
+│   │       └── supadata.py      # Supadata API client (channel video enumeration, transcript fetching)
 │   └── frontend/
 │       ├── package.json      # Bun dependencies + scripts
 │       ├── vite.config.ts    # Dev server port, API proxy to backend
@@ -237,7 +240,7 @@ bun run test
 
 **Current state:** SQLite via `aiosqlite`. Database file at `app/backend/data/chat.db`, auto-created on first startup via `backend.db.schema.init_db()` called from the FastAPI lifespan handler. No ORM. No Alembic migrations. Schema is `CREATE TABLE IF NOT EXISTS` against literal SQL in `schema.py`.
 
-**Tables:** `videos`, `chunks` (FK → videos), `conversations`, `messages` (FK → conversations). `PRAGMA foreign_keys=ON` and `PRAGMA journal_mode=WAL` set at connection time.
+**Tables:** `videos`, `chunks` (FK → videos), `conversations`, `messages` (FK → conversations), `channel_sync_runs`, `channel_sync_videos` (FK → channel_sync_runs). `PRAGMA foreign_keys=ON` and `PRAGMA journal_mode=WAL` set at connection time.
 
 ### Planned migration: Postgres
 
@@ -276,7 +279,9 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | **yes** | Authenticates embeddings and chat completions to OpenRouter |
-| `SUPADATA_API_KEY` | prod (YouTube ingestion) | Fetches YouTube transcripts via Supadata. Required by the ingestion path; dev can skip if working off already-seeded data |
+| `SUPADATA_API_KEY` | prod (YouTube ingestion) | Fetches YouTube transcripts via Supadata. Required for channel sync and manual ingestion |
+| `YOUTUBE_CHANNEL_ID` | prod (channel sync) | YouTube channel ID/handle to sync videos from via `POST /api/channels/sync` |
+| `CHANNEL_SYNC_TYPE` | prod (channel sync) | Content type filter for channel sync: `all`, `video`, `short`, `live`. Default: `video` |
 | `DATABASE_URL` | prod (post-migration) | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. Absent locally = fall back to SQLite |
 
 Everything else is currently hardcoded in `config.py` (model names, ports, chunk size, top-k). When adding configurability, add the constant to `config.py` with a sensible default:

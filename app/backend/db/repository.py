@@ -409,7 +409,12 @@ async def update_sync_video_status(
 
 
 async def get_video_by_youtube_id(youtube_video_id: str) -> dict | None:
-    """Check if a video has already been ingested by youtube_video_id."""
+    """
+    Check if a video has already been ingested.
+
+    Looks up a video by searching for *youtube_video_id* in the URL column
+    (assumes YouTube watch URL format ?v={id}). Returns None if not found.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(

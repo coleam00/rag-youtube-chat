@@ -14,8 +14,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 # Set auth-related env vars BEFORE any backend import so config.py picks them up.
-os.environ.setdefault("JWT_SECRET", "test-secret-please-do-not-use-in-prod")
-os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
+os.environ["JWT_SECRET"] = "test-secret-please-do-not-use-in-prod"
+os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/test"
+os.environ["SUPADATA_API_KEY"] = "test-supadata-key"
+os.environ["YOUTUBE_CHANNEL_ID"] = "UC_testchannel"
+os.environ["CHANNEL_SYNC_TYPE"] = "video"
 
 import pytest
 

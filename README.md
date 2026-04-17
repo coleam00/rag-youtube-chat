@@ -128,8 +128,9 @@ What the factory is actually building.
 ### How it works
 
 1. **Ingest** - Video transcripts are chunked with Docling's HybridChunker and embedded via OpenRouter.
-2. **Retrieve** - User queries are embedded and matched against chunks using cosine similarity.
-3. **Generate** - Top-5 chunks are passed as context to Claude, which streams a cited response back via SSE.
+2. **Sync** - `POST /api/channels/sync` automatically enumerates and ingests new videos from a YouTube channel via Supadata.
+3. **Retrieve** - User queries are embedded and matched against chunks using cosine similarity.
+4. **Generate** - Top-5 chunks are passed as context to Claude, which streams a cited response back via SSE.
 
 ---
 

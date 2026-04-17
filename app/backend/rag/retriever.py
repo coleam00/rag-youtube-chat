@@ -129,6 +129,7 @@ def _cosine_similarity_batch(
     matrix_norms = np.where(matrix_norms == 0, 1.0, matrix_norms)
     matrix_normalized = matrix / matrix_norms
 
-    # Dot product of normalized vectors = cosine similarity
+    # Named variable so mypy can infer the return type; inline return
+    # causes unexpected-axis-shape warnings in strict mode.
     result: np.ndarray = (matrix_normalized @ query_normalized).astype(np.float32)  # shape: (N,)
     return result

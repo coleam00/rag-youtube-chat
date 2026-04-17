@@ -77,8 +77,9 @@ async def sync_channel() -> SyncResponse:
     ingest any new videos (idempotent by youtube_video_id), and record a
     channel_sync_runs row with per-video status.
 
-    Returns immediately with sync run metadata; actual processing happens
-    inline (this is not a background task — systemd timer calls this endpoint).
+    This is a synchronous, sequential operation — all videos are processed
+    before the HTTP response is returned. The caller (e.g. systemd timer)
+    should set an appropriate request timeout.
     """
     if not YOUTUBE_CHANNEL_ID:
         raise HTTPException(
@@ -117,7 +118,7 @@ async def sync_channel() -> SyncResponse:
         )
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to enumerate channel videos: {exc}",
+            detail="Failed to enumerate channel videos. Check server logs for details.",
         ) from exc
 
     all_video_ids = (
@@ -134,20 +135,23 @@ async def sync_channel() -> SyncResponse:
         CHANNEL_SYNC_TYPE,
     )
 
-    # Record all video IDs as pending sync video records
+    # Process each video
     for youtube_video_id in all_video_ids:
-        await repo.create_sync_video(
+        # Create pending sync video record — we need its ID to update on error
+        sync_video_record = await repo.create_sync_video(
             sync_run_id=sync_run_id,
             youtube_video_id=youtube_video_id,
             status="pending",
         )
 
-    # Process each video
-    for youtube_video_id in all_video_ids:
         existing = await repo.get_video_by_youtube_id(youtube_video_id)
         if existing is not None:
             logger.info("Video %s already ingested, skipping", youtube_video_id)
             videos_new += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="ingested",
+            )
             continue
 
         # Fetch transcript
@@ -160,6 +164,11 @@ async def sync_channel() -> SyncResponse:
                 exc,
             )
             videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message=f"Transcript fetch failed: {exc}",
+            )
             continue
 
         if not transcript:
@@ -168,6 +177,11 @@ async def sync_channel() -> SyncResponse:
                 youtube_video_id,
             )
             videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message="No transcript available",
+            )
             continue
 
         # Build video metadata
@@ -190,6 +204,11 @@ async def sync_channel() -> SyncResponse:
                 exc,
             )
             videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message=f"Video creation failed: {exc}",
+            )
             continue
 
         video_id = video_record["id"]
@@ -202,7 +221,12 @@ async def sync_channel() -> SyncResponse:
                 "Chunker returned 0 chunks for video %s",
                 youtube_video_id,
             )
-            videos_new += 1
+            videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message="Chunker returned 0 chunks",
+            )
             continue
 
         # Embed all chunks
@@ -215,6 +239,11 @@ async def sync_channel() -> SyncResponse:
                 exc,
             )
             videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message=f"Embedding failed: {exc}",
+            )
             continue
 
         # Store chunks
@@ -233,9 +262,18 @@ async def sync_channel() -> SyncResponse:
                 exc,
             )
             videos_error += 1
+            await repo.update_sync_video_status(
+                video_id=sync_video_record["id"],
+                status="error",
+                error_message=f"Chunk storage failed: {exc}",
+            )
             continue
 
         videos_new += 1
+        await repo.update_sync_video_status(
+            video_id=sync_video_record["id"],
+            status="ingested",
+        )
         logger.info(
             "Ingested video %s (%s): %d chunks",
             youtube_video_id,
@@ -246,8 +284,9 @@ async def sync_channel() -> SyncResponse:
     # Invalidate retriever cache once at the end
     retriever.invalidate_cache()
 
-    # Mark sync run as complete
-    status = "completed" if videos_error == 0 else ("completed" if videos_new > 0 else "failed")
+    # Determine overall status
+    success = videos_error == 0 or videos_new > 0
+    status = "completed" if success else "failed"
     await repo.update_sync_run(
         sync_run_id=sync_run_id,
         status=status,
@@ -277,7 +316,11 @@ async def sync_channel() -> SyncResponse:
 @router.get("/channels/sync-runs", response_model=SyncRunsResponse)
 async def list_sync_runs() -> SyncRunsResponse:
     """
-    List recent channel sync runs with per-video error summary.
+    List the 10 most recent channel sync runs, ordered newest first.
+
+    Returns a SyncRunsResponse with per-run aggregates (videos_total,
+    videos_new, videos_error). Individual video records can be retrieved
+    via list_sync_videos_for_run(sync_run_id) if needed.
     """
     rows = await repo.list_sync_runs(limit=10)
     sync_runs = [SyncRun(**row) for row in rows]

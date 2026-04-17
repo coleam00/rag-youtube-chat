@@ -24,6 +24,13 @@ _client: Supadata | None = None
 
 
 def _get_client() -> Supadata:
+    """
+    Return the module-level Supadata singleton.
+
+    The client is created once on first call and reused for all subsequent
+    calls. This mirrors the pattern in backend.rag.embeddings. Caller does not
+    need to and should not call close() on the returned client.
+    """
     global _client
     if _client is None:
         _client = Supadata(api_key=SUPADATA_API_KEY)
@@ -90,13 +97,14 @@ async def get_channel_video_ids(
                 exc,
             )
             raise
-        except Exception as exc:
-            logger.error("Unexpected error in get_channel_video_ids: %s", exc)
-            raise SupadataError(str(exc)) from exc
+        except SupadataError:
+            raise  # already handled above, just re-raise
+        except (asyncio.TimeoutError, OSError) as exc:
+            logger.error("Network error in get_channel_video_ids: %s", exc)
+            raise SupadataError(error="network_error", message=str(exc), details="") from exc
+        # Let other exceptions (TypeError, AttributeError, CancelledError) propagate
 
-    # Exhausted retries without returning — this should never be reached
-    # since the loop returns or raises on every attempt. Exit with a
-    # clear RuntimeError so mypy sees a guaranteed return path.
+    # All attempts returned or raised; keep mypy happy with an explicit fallback.
     raise RuntimeError("get_channel_video_ids: retries exhausted without return")
 
 
@@ -135,9 +143,11 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
                 return None
             logger.error("Supadata transcript failed for video %s: %s", video_id, exc)
             raise
-        except Exception as exc:
-            logger.error("Unexpected error in get_transcript for %s: %s", video_id, exc)
-            raise SupadataError(str(exc)) from exc
+        except SupadataError:
+            raise  # already handled above, just re-raise
+        except (asyncio.TimeoutError, OSError) as exc:
+            logger.error("Network error in get_transcript for %s: %s", video_id, exc)
+            raise SupadataError(error="network_error", message=str(exc), details="") from exc
+        # Let other exceptions (TypeError, AttributeError, CancelledError) propagate
 
-    # Exhausted retries — return None for unreachable code paths.
-    return None
+    return None  # Satisfy mypy — unreachable after loop exhausts
