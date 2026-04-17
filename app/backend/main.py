@@ -1,6 +1,6 @@
 """
 FastAPI application entry point.
-Handles lifespan startup (DB init + seeding) and route registration.
+Handles lifespan startup (Alembic migrations + seeding) and route registration.
 """
 
 import logging
@@ -16,33 +16,40 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.auth.dependencies import get_current_user
-from backend.config import DATABASE_URL, DB_PATH
 from backend.data.seed import seed_if_empty
-from backend.db.postgres import close_pg_pool, init_signup_attempts_schema, init_users_schema
-from backend.db.schema import init_db
+from backend.db.postgres import close_pg_pool, init_pg_pool
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+async def _run_alembic_migrations() -> None:
+    """Run Alembic upgrade head to apply all migrations."""
+
+    from alembic import context
+
+    # Import the offline/online runners from our alembic/env.py
+    # We re-use the DATABASE_URL already loaded in this process.
+    from backend.alembic import env as alembic_env
+
+    if context.is_offline_mode():
+        raise RuntimeError("Alembic is in offline mode; cannot run migrations.")
+    await alembic_env.run_migrations_online()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: initialise DB tables (SQLite + Postgres), then seed if empty."""
-    logger.info("Starting up — initialising database…")
-    await init_db()
-    if DATABASE_URL:
-        logger.info("DATABASE_URL set — initialising Postgres users schema…")
-        await init_users_schema()
-        await init_signup_attempts_schema()
-    else:
-        logger.warning("DATABASE_URL not set; auth endpoints will fail until configured.")
+    """Startup: run Alembic migrations, init Postgres pool, seed if empty."""
+    logger.info("Starting up — running Alembic migrations…")
+    await _run_alembic_migrations()
+    logger.info("Migrations complete. Initialising Postgres pool…")
+    await init_pg_pool()
     logger.info("Database ready. Checking seed data…")
     await seed_if_empty()
     logger.info("Startup complete.")
     yield
     logger.info("Shutting down.")
-    if DATABASE_URL:
-        await close_pg_pool()
+    await close_pg_pool()
 
 
 app = FastAPI(title="RAG YouTube Chat API", lifespan=lifespan)
@@ -88,7 +95,6 @@ async def health():
         "status": "ok",
         "video_count": video_count,
         "chunk_count": chunk_count,
-        "db_path": str(DB_PATH),
     }
 
 

@@ -18,7 +18,7 @@ This file covers **how the code is written**. For *what* to build, see `MISSION.
 - Python 3.11+ (not specified in any lockfile; don't rely on 3.12+ features)
 - `uv` for package management (not pip, not poetry) — `backend/pyproject.toml` is the dependency source of truth, `backend/uv.lock` pins exact versions
 - FastAPI with `uvicorn[standard]` ASGI server
-- `aiosqlite` for async SQLite access (no ORM — raw SQL through `db/repository.py`)
+- `asyncpg` for async Postgres access (no ORM — raw SQL through `db/repository.py`)
 - `docling-core[chunking]` for transcript chunking (HybridChunker)
 - `openai` SDK pointed at OpenRouter's OpenAI-compatible endpoint (for both embeddings and chat completions)
 - `numpy` for in-process cosine similarity
@@ -52,11 +52,14 @@ rag-youtube-chat/
 │   │   ├── config.py        # All env var reads + hardcoded constants
 │   │   ├── pyproject.toml   # uv dependencies + tool config (ruff, mypy, pytest)
 │   │   ├── uv.lock          # uv lockfile (committed, pinned versions)
+│   │   ├── alembic.ini      # Alembic configuration
+│   │   ├── alembic/
+│   │   │   ├── env.py       # Async migration environment
+│   │   │   └── versions/    # Migration scripts (Alembic revision files)
 │   │   ├── data/
-│   │   │   ├── chat.db      # SQLite database (auto-created, gitignored)
 │   │   │   └── seed.py      # 10 mock videos seeded on first startup
 │   │   ├── db/
-│   │   │   ├── schema.py    # CREATE TABLE IF NOT EXISTS, PRAGMAs, init_db()
+│   │   │   ├── postgres.py  # asyncpg pool singleton, schema constants
 │   │   │   └── repository.py # ALL raw SQL lives here — nowhere else
 │   │   ├── llm/
 │   │   │   └── openrouter.py # stream_chat() async generator, SSE-formatted output
@@ -64,6 +67,9 @@ rag-youtube-chat/
 │   │   │   ├── chunker.py    # Docling HybridChunker wrapper
 │   │   │   ├── embeddings.py # embed_text / embed_batch via OpenRouter
 │   │   │   └── retriever.py  # NumPy cosine similarity top-k
+│   │   ├── scripts/
+│   │   │   ├── migrate_sqlite_to_pg.py  # One-time SQLite → Postgres migrator
+│   │   │   └── dump_sqlite.sh           # SQLite snapshot helper
 │   │   └── routes/
 │   │       ├── conversations.py # GET/POST/DELETE /api/conversations*, GET /api/videos
 │   │       ├── messages.py      # POST /api/conversations/{id}/messages (streaming SSE)
@@ -148,7 +154,7 @@ All backend tool invocations run from `app/backend/` so that `pyproject.toml` (w
 - `pytest`, `pytest-asyncio`, and `httpx` are declared in `backend/pyproject.toml` under `[project.optional-dependencies].dev` — installed by `uv sync --all-extras`
 - Use `pytest-asyncio` for async tests (`asyncio_mode = "auto"` is set in `pyproject.toml`, so plain `async def` test functions work)
 - Use `httpx.AsyncClient` against a test FastAPI app for integration tests
-- SQLite tests use a separate temp database; never touch `app/backend/data/chat.db`
+- Tests use a test Postgres database; never touch the production `dynachat` database
 
 **TypeScript frontend:**
 
@@ -210,12 +216,12 @@ bun run test
 
 ### Python (backend)
 
-- **Async everywhere.** FastAPI routes are `async def`. Database calls use `aiosqlite`. Any sync blocking call (file I/O, CPU work) in a route handler is a bug — use `asyncio.to_thread` or move it to a background task.
+- **Async everywhere.** FastAPI routes are `async def`. Database calls use `asyncpg`. Any sync blocking call (file I/O, CPU work) in a route handler is a bug — use `asyncio.to_thread` or move it to a background task.
 - **Imports:** stdlib first, third-party second, local third. Group with blank lines. No wildcard imports.
 - **Type hints:** use them on every function signature and return type. Use `list[str]` / `dict[str, int]` syntax (Python 3.9+), not `List` / `Dict` from `typing`.
 - **No `print()` in runtime code.** Use `logging` with a module-level logger: `logger = logging.getLogger(__name__)`. `print()` is acceptable in `data/seed.py` and one-off scripts.
 - **Errors:** raise specific exceptions (`ValueError`, `KeyError`, custom) with clear messages. Never `except:` bare. Avoid `except Exception` except at the outermost request handler, where FastAPI's exception handlers take over.
-- **SQL:** all queries live in `db/repository.py`. Parameterize — never use f-strings or `%` formatting to build SQL. `aiosqlite` uses `?` placeholders.
+- **SQL:** all queries live in `db/repository.py`. Parameterize — never use f-strings or `%` formatting to build SQL. `asyncpg` uses `$1, $2` placeholders.
 - **Config:** every environment variable is read exactly once in `config.py` and exposed as a module-level constant. Routes and services import the constant, never `os.environ` directly.
 - **Pydantic models:** use `pydantic.BaseModel` for request/response schemas, defined in the route file that uses them (unless shared).
 
@@ -235,24 +241,50 @@ bun run test
 
 ## Database
 
-**Current state:** SQLite via `aiosqlite`. Database file at `app/backend/data/chat.db`, auto-created on first startup via `backend.db.schema.init_db()` called from the FastAPI lifespan handler. No ORM. No Alembic migrations. Schema is `CREATE TABLE IF NOT EXISTS` against literal SQL in `schema.py`.
+**Current state:** Postgres via `asyncpg` + Alembic migrations. All tables (`videos`, `chunks`, `conversations`, `messages`, `users`, `user_messages`, `signup_attempts`) live in Postgres. Schema is managed by Alembic — see `alembic/versions/`. The old `aiosqlite` + `schema.py` pattern has been removed.
 
-**Tables:** `videos`, `chunks` (FK → videos), `conversations`, `messages` (FK → conversations). `PRAGMA foreign_keys=ON` and `PRAGMA journal_mode=WAL` set at connection time.
+**Startup:** The FastAPI lifespan runs `alembic upgrade head` to apply any pending migrations before the app begins serving traffic.
 
-### Planned migration: Postgres
+### Alembic workflow
 
-**Production target already provisioned.** The factory VPS runs `pgvector/pgvector:pg16` (pgvector 0.8.2) via docker-compose, bound to `127.0.0.1:5433`, database `dynachat`, user `dynachat`. The password and full `DATABASE_URL` live in `/opt/dynachat/.env` on the prod host (root-owned, mode 600). The factory does **not** read that file — it only references `os.environ.get("DATABASE_URL")` from `config.py`, and docker-compose injects it at container start.
+Schema changes go through Alembic migrations, not raw SQL in `schema.py`.
 
-The factory is **allowed** to work on the Postgres migration when an issue is filed for it (this is one of the few architectural changes explicitly permitted by MISSION.md). Until then, write all new code in a Postgres-portable way so the eventual migration is a drop-in swap, not a rewrite.
+**Create a new migration:**
+```bash
+cd app/backend
+DATABASE_URL="postgresql://..." uv run alembic revision --autogenerate -m "description"
+# Edit the generated file in alembic/versions/ if needed
+```
 
-**Rules for new database code today:**
+**Apply migrations (normal startup):**
+```bash
+uv run alembic upgrade head
+```
 
-1. **Only use SQL that is portable across SQLite and Postgres.** No `json_extract()`, no `strftime()`, no SQLite-specific pragmas baked into queries. Stick to ANSI SQL.
-2. **Never rely on SQLite's permissive typing.** Put explicit `NOT NULL`, `CHECK`, and type constraints on every new column.
-3. **Use ISO 8601 strings for timestamps**, not SQLite's `DATETIME`. Both databases round-trip ISO strings cleanly; `DATETIME` does not.
-4. **Primary keys are text UUIDs** (already the convention — keep it that way). Do not add auto-increment integer PKs; they'll complicate the Postgres migration.
-5. **When the migration happens**, `aiosqlite` will be swapped for `asyncpg` or `psycopg[binary]`. Keep all SQL in `db/repository.py` so the swap is confined to one file.
-6. **Do not introduce Alembic yet.** When the migration starts, the first PR of that effort introduces Alembic, generates an initial migration from the existing schema, and vendors it. Until then, `schema.py`'s `CREATE TABLE IF NOT EXISTS` remains authoritative.
+**Rollback one step:**
+```bash
+uv run alembic downgrade -1
+```
+
+**Rollback to base (empty DB, extensions remain):**
+```bash
+uv run alembic downgrade base
+```
+
+**Check current revision:**
+```bash
+uv run alembic current
+```
+
+Migrations use raw SQL via `op.execute()` (no ORM models). Embeddings are stored as `REAL[]` (native Postgres array), not JSON.
+
+**Rules for database code:**
+
+1. **All SQL goes in `db/repository.py`.** Parameterize — use `$1, $2` placeholders (asyncpg style), not `?` (aiosqlite style).
+2. **Timestamps are `TIMESTAMPTZ`.** Pass ISO 8601 strings or `datetime` objects; asyncpg handles the conversion.
+3. **Embeddings are `REAL[]`.** Pass a `list[float]`; asyncpg serialises this natively.
+4. **UUIDs for new Postgres-native tables** (`users`, `user_messages`, `signup_attempts`); **TEXT for chat tables** (`videos`, `chunks`, `conversations`, `messages`) which use client-generated string IDs.
+5. **ON DELETE CASCADE** is defined at the Postgres level in migrations, not at query time.
 
 ---
 
@@ -277,7 +309,7 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 |---|---|---|
 | `OPENROUTER_API_KEY` | **yes** | Authenticates embeddings and chat completions to OpenRouter |
 | `SUPADATA_API_KEY` | prod (YouTube ingestion) | Fetches YouTube transcripts via Supadata. Required by the ingestion path; dev can skip if working off already-seeded data |
-| `DATABASE_URL` | prod (post-migration) | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. Absent locally = fall back to SQLite |
+| `DATABASE_URL` | **yes** | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. Required — app refuses to start without it (no SQLite fallback) |
 
 Everything else is currently hardcoded in `config.py` (model names, ports, chunk size, top-k). When adding configurability, add the constant to `config.py` with a sensible default:
 

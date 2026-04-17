@@ -1,15 +1,15 @@
 """
 Repository layer — all database access goes through this module.
 No raw SQL lives in route handlers.
+
+All tables use Postgres (asyncpg). The pool is acquired per-operation via
+`get_pg_pool()` which is initialised in the FastAPI lifespan.
 """
 
-import json
 import uuid
 from datetime import UTC, datetime
 
-import aiosqlite
-
-from backend.config import DB_PATH
+from backend.db.postgres import get_pg_pool
 
 
 def _new_id() -> str:
@@ -34,13 +34,20 @@ async def create_video(
 ) -> dict:
     vid_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO videos (id, title, description, url, transcript, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (vid_id, title, description, url, transcript, now),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO videos (id, title, description, url, transcript, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            vid_id,
+            title,
+            description,
+            url,
+            transcript,
+            now,
         )
-        await db.commit()
     return {
         "id": vid_id,
         "title": title,
@@ -52,29 +59,28 @@ async def create_video(
 
 
 async def get_video(video_id: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)) as cursor:
-            row = await cursor.fetchone()
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM videos WHERE id = $1",
+            video_id,
+        )
     return dict(row) if row else None
 
 
 async def list_videos() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
             "SELECT id, title, description, url, created_at FROM videos ORDER BY created_at DESC"
-        ) as cursor:
-            rows = await cursor.fetchall()
+        )
     return [dict(r) for r in rows]
 
 
 async def count_videos() -> int:
-    async with (
-        aiosqlite.connect(DB_PATH) as db,
-        db.execute("SELECT COUNT(*) FROM videos") as cursor,
-    ):
-        row = await cursor.fetchone()
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT COUNT(*) FROM videos")
     return row[0] if row else 0
 
 
@@ -91,14 +97,19 @@ async def create_chunk(
     chunk_index: int,
 ) -> dict:
     chunk_id = _new_id()
-    embedding_json = json.dumps(embedding)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO chunks (id, video_id, content, embedding, chunk_index) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (chunk_id, video_id, content, embedding_json, chunk_index),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO chunks (id, video_id, content, embedding, chunk_index)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            chunk_id,
+            video_id,
+            content,
+            embedding,
+            chunk_index,
         )
-        await db.commit()
     return {
         "id": chunk_id,
         "video_id": video_id,
@@ -109,44 +120,30 @@ async def create_chunk(
 
 
 async def list_chunks() -> list[dict]:
-    """Return all chunks with their embeddings (deserialized)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, video_id, content, embedding, chunk_index FROM chunks"
-        ) as cursor:
-            rows = await cursor.fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["embedding"] = json.loads(d["embedding"])
-        result.append(d)
-    return result
+    """Return all chunks with their embeddings (already REAL[] from Postgres)."""
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT id, video_id, content, embedding, chunk_index FROM chunks")
+    return [dict(r) for r in rows]
 
 
 async def list_chunks_for_video(video_id: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, video_id, content, embedding, chunk_index FROM chunks "
-            "WHERE video_id = ? ORDER BY chunk_index",
-            (video_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-    result = []
-    for r in rows:
-        d = dict(r)
-        d["embedding"] = json.loads(d["embedding"])
-        result.append(d)
-    return result
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, video_id, content, embedding, chunk_index FROM chunks
+            WHERE video_id = $1 ORDER BY chunk_index
+            """,
+            video_id,
+        )
+    return [dict(r) for r in rows]
 
 
 async def count_chunks() -> int:
-    async with (
-        aiosqlite.connect(DB_PATH) as db,
-        db.execute("SELECT COUNT(*) FROM chunks") as cursor,
-    ):
-        row = await cursor.fetchone()
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT COUNT(*) FROM chunks")
     return row[0] if row else 0
 
 
@@ -158,13 +155,19 @@ async def count_chunks() -> int:
 async def create_conversation(*, user_id: str, title: str = "New Conversation") -> dict:
     conv_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO conversations (id, user_id, title, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (conv_id, user_id, title, now, now),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO conversations (id, user_id, title, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            conv_id,
+            user_id,
+            title,
+            now,
+            now,
         )
-        await db.commit()
     return {
         "id": conv_id,
         "user_id": user_id,
@@ -176,20 +179,20 @@ async def create_conversation(*, user_id: str, title: str = "New Conversation") 
 
 async def get_conversation(conv_id: str, user_id: str) -> dict | None:
     """Return the conversation only if it belongs to the given user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
-            (conv_id, user_id),
-        ) as cursor:
-            row = await cursor.fetchone()
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM conversations WHERE id = $1 AND user_id = $2",
+            conv_id,
+            user_id,
+        )
     return dict(row) if row else None
 
 
 async def list_conversations(user_id: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT c.*,
                    (SELECT content
@@ -198,46 +201,57 @@ async def list_conversations(user_id: str) -> list[dict]:
                     ORDER BY created_at DESC
                     LIMIT 1) AS preview
             FROM conversations c
-            WHERE c.user_id = ?
+            WHERE c.user_id = $1
             ORDER BY c.updated_at DESC
             """,
-            (user_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            user_id,
+        )
     return [dict(r) for r in rows]
 
 
 async def update_conversation_title(conv_id: str, user_id: str, title: str) -> bool:
     """Rename a conversation. Returns False if it does not belong to the user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-            (title, _now(), conv_id, user_id),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM conversations WHERE id = $1 AND user_id = $2",
+            conv_id,
+            user_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        if not exists:
+            return False
+        await conn.execute(
+            "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
+            title,
+            _now(),
+            conv_id,
+            user_id,
+        )
+        return True
 
 
 async def touch_conversation(conv_id: str, user_id: str) -> None:
     """Update the updated_at timestamp (scoped to owner; silent no-op otherwise)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
-            (_now(), conv_id, user_id),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE conversations SET updated_at = $1 WHERE id = $2 AND user_id = $3",
+            _now(),
+            conv_id,
+            user_id,
         )
-        await db.commit()
 
 
 async def delete_conversation(conv_id: str, user_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Enable foreign keys so ON DELETE CASCADE removes associated messages
-        await db.execute("PRAGMA foreign_keys=ON;")
-        cursor = await db.execute(
-            "DELETE FROM conversations WHERE id = ? AND user_id = ?",
-            (conv_id, user_id),
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        # ON DELETE CASCADE is defined at the Postgres level for messages
+        deleted = await conn.fetchval(
+            "DELETE FROM conversations WHERE id = $1 AND user_id = $2 RETURNING id",
+            conv_id,
+            user_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        return deleted is not None
 
 
 # ---------------------------------------------------------------------------
@@ -255,22 +269,29 @@ async def create_message(
     """Insert a message. Returns None if the conversation does not belong to the user."""
     msg_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
         # Verify ownership atomically — INSERT only succeeds if the conversation
         # row exists for this user. Prevents cross-user message injection even
         # if a route handler forgets to check.
-        cursor = await db.execute(
+        inserted = await conn.fetchval(
             """
             INSERT INTO messages (id, conversation_id, role, content, created_at)
-            SELECT ?, ?, ?, ?, ?
+            SELECT $1, $2, $3, $4, $5
             WHERE EXISTS (
-                SELECT 1 FROM conversations WHERE id = ? AND user_id = ?
+                SELECT 1 FROM conversations WHERE id = $6 AND user_id = $7
             )
+            RETURNING id
             """,
-            (msg_id, conversation_id, role, content, now, conversation_id, user_id),
+            msg_id,
+            conversation_id,
+            role,
+            content,
+            now,
+            conversation_id,
+            user_id,
         )
-        await db.commit()
-        if cursor.rowcount == 0:
+        if inserted is None:
             return None
     await touch_conversation(conversation_id, user_id)
     return {
@@ -284,17 +305,17 @@ async def create_message(
 
 async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
     """Return messages only if the conversation belongs to the given user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    pool = get_pg_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT m.*
             FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.conversation_id = ? AND c.user_id = ?
+            WHERE m.conversation_id = $1 AND c.user_id = $2
             ORDER BY m.created_at ASC
             """,
-            (conversation_id, user_id),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            conversation_id,
+            user_id,
+        )
     return [dict(r) for r in rows]

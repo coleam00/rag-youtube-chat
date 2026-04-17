@@ -51,15 +51,16 @@ OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
 CHAT_MODEL: str = "anthropic/claude-sonnet-4.6"
 
-# Database — env-overridable so containerized deploys can point at a mounted volume.
-# Default preserves the existing local dev behaviour (app/backend/data/chat.db).
-_default_db_path = Path(__file__).resolve().parent / "data" / "chat.db"
-DB_PATH: Path = Path(os.environ.get("DB_PATH", str(_default_db_path)))
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-# Postgres — required in prod for auth/users. Absent locally means auth endpoints
-# will fail on first DB call; pick one of the existing chat routes for local dev.
-DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+# Postgres — required. No SQLite fallback. All tables (chat + auth) live in Postgres.
+# In prod, docker-compose sets DATABASE_URL pointing at the in-compose postgres service.
+# Locally, either set DATABASE_URL or the app will refuse to start.
+DATABASE_URL: str | None = os.environ.get("DATABASE_URL")
+if DATABASE_URL is None:
+    raise RuntimeError(
+        "DATABASE_URL is not set. "
+        "All tables live in Postgres; there is no SQLite fallback. "
+        "Set DATABASE_URL to connect (e.g. postgresql://user:pass@localhost:5432/dynachat)."
+    )
 
 # JWT signing secret. Required whenever auth is active. 32+ random bytes in prod.
 # A local dev value is used only when JWT_SECRET is unset AND DATABASE_URL is unset

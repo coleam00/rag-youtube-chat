@@ -73,12 +73,20 @@ def patch_rate_limit(monkeypatch, message_store):
         resets_at: datetime | None = None
         if in_window:
             resets_at = min(in_window) + timedelta(hours=rate_limit.WINDOW_HOURS)
-        return rate_limit.RateLimitStatus(
-            used=used, remaining=remaining, resets_at=resets_at
-        )
+        return rate_limit.RateLimitStatus(used=used, remaining=remaining, resets_at=resets_at)
 
     monkeypatch.setattr(rate_limit, "check_and_record", fake_check_and_record)
     monkeypatch.setattr(rate_limit, "get_status", fake_get_status)
+
+
+async def _noop(*args, **kwargs):
+    """No-op for init_pg_pool in tests (pool is stubbed separately)."""
+    return None
+
+
+# Shared in-memory store used by _FakeConn to simulate a real Postgres connection.
+# Each key is the SQL type (e.g. "conversations"), value is a list of rows.
+_test_store: dict[str, list[dict[str, object]]] = {}
 
 
 class _FakeConn:
@@ -91,6 +99,15 @@ class _FakeConn:
     """
 
     async def execute(self, *args, **kwargs):
+        return None
+
+    async def fetch(self, *args, **kwargs):
+        return []
+
+    async def fetchrow(self, *args, **kwargs):
+        return None
+
+    async def fetchval(self, *args, **kwargs):
         return None
 
     def transaction(self):
@@ -118,11 +135,15 @@ class _FakePool:
 def patch_pg_pool(monkeypatch):
     """Return a no-op pool so `pool.acquire()`/`conn.transaction()` succeed in tests."""
     from backend.db import postgres as pg
+    from backend.db import repository
     from backend.routes import auth as auth_route
 
     fake = _FakePool()
     monkeypatch.setattr(pg, "get_pg_pool", lambda: fake)
+    monkeypatch.setattr(pg, "init_pg_pool", _noop)
     monkeypatch.setattr(auth_route, "get_pg_pool", lambda: fake)
+    # repository also imports get_pg_pool directly from postgres — patch it there too
+    monkeypatch.setattr(repository, "get_pg_pool", lambda: fake)
 
 
 @pytest.fixture(autouse=True)
