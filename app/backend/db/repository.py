@@ -16,8 +16,8 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

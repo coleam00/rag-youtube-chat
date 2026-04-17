@@ -6,6 +6,7 @@ to run migrations. This replaces the old `init_db()` / `init_users_schema()` /
 `init_signup_attempts_schema()` pattern.
 """
 
+import asyncio
 from logging import getLogger
 
 from backend.config import DATABASE_URL
@@ -34,7 +35,6 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=None,
         literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
     )
 
     with context.begin_transaction():
@@ -78,6 +78,4 @@ def _do_configure_and_run(connection) -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    import asyncio
-
     asyncio.run(run_migrations_online())

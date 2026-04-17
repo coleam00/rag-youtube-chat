@@ -41,7 +41,10 @@ export function useStreamingResponse() {
         }
         if (res.status === 429) {
           // MISSION §10 #1 — daily cap hit. Body: {error, limit, window_hours, reset_at}.
-          const body = await res.json().catch(() => null);
+          const body = await res.json().catch(() => {
+            console.warn('useStreamingResponse: failed to parse 429 body, using generic message');
+            return null;
+          });
           if (body && typeof body === 'object' && 'limit' in body) {
             throw new RateLimitError(body);
           }

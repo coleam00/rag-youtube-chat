@@ -121,14 +121,14 @@ class _FakeConn:
 
 
 class _FakePool:
-    def acquire(self):
-        return self
-
-    async def __aenter__(self):
+    async def acquire(self):
         return _FakeConn()
 
+    async def __aenter__(self):
+        return self
+
     async def __aexit__(self, *exc):
-        return False
+        pass
 
 
 @pytest.fixture(autouse=True)

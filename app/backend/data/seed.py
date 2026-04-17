@@ -317,11 +317,19 @@ async def run_seed() -> None:
     """Insert all 10 seed videos into the database with full chunking + embedding."""
     total = len(SEED_VIDEOS)
     total_chunks = 0
+    failed_videos: list[str] = []
     for i, video in enumerate(SEED_VIDEOS, start=1):
         print(f"Seeding video {i}/{total}: {video['title']}")
         n = await _ingest_video(video)
+        if n == 0:
+            failed_videos.append(video["title"])
         total_chunks += n
         print(f"  -> {n} chunks created")
+    if failed_videos:
+        raise RuntimeError(
+            f"Seed failed for {len(failed_videos)} videos: {failed_videos}. "
+            "Check embedding API connectivity."
+        )
     print(f"Seeding complete: {total} videos, {total_chunks} chunks inserted")
 
 

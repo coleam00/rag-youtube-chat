@@ -126,8 +126,8 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        CREATE INDEX IF NOT EXISTS conversations_user_id_idx
-        ON conversations (user_id)
+        CREATE INDEX IF NOT EXISTS conversations_user_id_updated_at_idx
+        ON conversations (user_id, updated_at DESC)
         """
     )
 
@@ -146,11 +146,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS messages")
-    op.execute("DROP TABLE IF EXISTS conversations")
-    op.execute("DROP TABLE IF EXISTS chunks")
+    # Drop referencing tables before referenced tables (FK dependency order)
+    op.execute("DROP TABLE IF EXISTS messages")          # references conversations
+    op.execute("DROP TABLE IF EXISTS conversations")     # references users (via user_id)
+    op.execute("DROP TABLE IF EXISTS chunks")           # references videos
     op.execute("DROP TABLE IF EXISTS videos")
     op.execute("DROP TABLE IF EXISTS signup_attempts")
-    op.execute("DROP TABLE IF EXISTS user_messages")
+    op.execute("DROP TABLE IF EXISTS user_messages")    # references users
     op.execute("DROP TABLE IF EXISTS users")
     # Extensions are intentionally kept — they persist across migrations

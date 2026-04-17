@@ -344,7 +344,11 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
         }
 
         const errMsg = e instanceof Error ? e.message : 'Failed to send message';
-        setInlineError('Failed to get a response. Please try again.');
+        const inlineMsg =
+          errMsg.includes('network') || errMsg === ''
+            ? 'Network error — message not sent. Check your connection.'
+            : `Failed to get a response: ${errMsg}`;
+        setInlineError(inlineMsg);
         setFailedMessageText(content);
         addToast(errMsg || 'Network error — message not sent', 'error');
         setTimeout(() => chatInputRef.current?.setInputText(content), 50);

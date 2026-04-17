@@ -106,7 +106,7 @@ What the factory is actually building.
                                             │    │     (Docling)      │
                                             │    │        │           │
                                             │    DB    Embeddings     │
-                                            │  (SQLite) (OpenRouter)  │
+                                            │ (Postgres) (OpenRouter) │
                                             │            │            │
                                             │         Retriever       │
                                             │       (NumPy cosine)    │
@@ -119,7 +119,7 @@ What the factory is actually building.
 
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS (Bun)
 - **Backend:** Python FastAPI, single process handling API + RAG + LLM
-- **Database:** SQLite via aiosqlite (Postgres-swappable via repository pattern)
+- **Database:** Postgres via asyncpg (Alembic migrations; Postgres-swappable via repository pattern)
 - **LLM:** Claude Sonnet via OpenRouter with SSE streaming
 - **Embeddings:** `text-embedding-3-small` via OpenRouter
 - **Chunking:** Docling HybridChunker
@@ -127,7 +127,7 @@ What the factory is actually building.
 
 ### How it works
 
-1. **Ingest** - Video transcripts are chunked with Docling's HybridChunker and embedded via OpenRouter.
+1. **Ingest** - Video transcripts are chunked with Docling's HybridChunker and embedded via OpenRouter into Postgres.
 2. **Retrieve** - User queries are embedded and matched against chunks using cosine similarity.
 3. **Generate** - Top-5 chunks are passed as context to Claude, which streams a cited response back via SSE.
 
@@ -147,7 +147,11 @@ What the factory is actually building.
 
 ```
 OPENROUTER_API_KEY=your-key-here
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/dynachat
 ```
+
+> **Note:** The app requires Postgres. The easiest local setup is via Docker:
+> `docker run -d -p 5433:5432 -e POSTGRES_DB=dynachat -e POSTGRES_PASSWORD=postgres postgres:16`
 
 2. Start everything:
 
@@ -168,10 +172,8 @@ This sets up the Python venv, installs dependencies, seeds the database with 10 
 ```bash
 # Backend
 cd app
-python -m venv backend/.venv
-source backend/.venv/bin/activate  # or backend\.venv\Scripts\activate on Windows
-pip install -r backend/requirements.txt
-uvicorn backend.main:app --reload --port 8000
+uv sync --all-extras
+uv --project backend run uvicorn backend.main:app --reload --port 8000
 
 # Frontend (new terminal)
 cd app/frontend

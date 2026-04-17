@@ -112,6 +112,7 @@ async def create_message(
     # 5. Embed the user query and retrieve relevant chunks
     context = ""
     chunks: list[dict] = []
+    retrieval_failed = False
     try:
         query_embedding = embed_text(user_content)
         chunks = await retrieve(query_embedding, k=5)
@@ -119,6 +120,7 @@ async def create_message(
             context = _format_context(chunks)
     except Exception as exc:
         logger.warning("RAG retrieval failed (continuing without context): %s", exc)
+        retrieval_failed = True
 
     # Extract unique source video titles for the SSE sources event
     source_titles: list[str] = list(
@@ -127,6 +129,9 @@ async def create_message(
 
     # 6. Stream the response
     async def event_generator() -> AsyncGenerator[str, None]:
+        # Emit warning if retrieval previously failed so the user knows citations may be missing
+        if retrieval_failed:
+            yield "event: warning\ndata: {\"type\":\"retrieval_failed\",\"message\":\"Retrieval unavailable — answer may lack citations\"}\n\n"
         full_response = []
         try:
             async for sse_chunk in stream_chat(llm_messages, context=context):
@@ -151,6 +156,7 @@ async def create_message(
                     await _maybe_set_conversation_title(conv_id, user_id, user_content)
                 except Exception as exc:
                     logger.error("Failed to persist assistant message: %s", exc)
+                    raise  # Propagate so FastAPI returns 500 after stream completes
 
     return StreamingResponse(
         event_generator(),
