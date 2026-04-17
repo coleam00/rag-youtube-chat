@@ -19,6 +19,7 @@ export function CitationModal({ citation, onClose }: CitationModalProps) {
     try {
       return new URL(citation.video_url).searchParams.get('v') ?? '';
     } catch {
+      console.warn('[CitationModal] Could not parse video URL:', citation.video_url);
       return '';
     }
   })();
@@ -48,7 +49,7 @@ export function CitationModal({ citation, onClose }: CitationModalProps) {
     };
   }, []);
 
-  // Truncate snippet to 300 chars with ellipsis
+  // Truncate snippet to max 300 display chars (297 + ellipsis)
   const snippetDisplay =
     citation.snippet.length > 300 ? citation.snippet.slice(0, 297) + '…' : citation.snippet;
 

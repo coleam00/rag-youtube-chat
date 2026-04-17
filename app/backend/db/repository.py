@@ -59,6 +59,14 @@ async def get_video(video_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+async def delete_video(video_id: str) -> None:
+    """Delete a video and all its associated chunks (FK cascade handles chunks)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("PRAGMA foreign_keys=ON;")
+        await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+        await db.commit()
+
+
 async def list_videos() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

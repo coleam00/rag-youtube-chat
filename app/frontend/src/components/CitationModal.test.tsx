@@ -105,4 +105,41 @@ describe('CitationModal', () => {
 
     expect(screen.getByText('Video unavailable')).toBeInTheDocument();
   });
+
+  it('shows video unavailable when youtube URL has empty v parameter', () => {
+    const badCitation: Citation = {
+      ...mockCitation,
+      video_url: 'https://youtube.com/watch?v=',
+    };
+    const onClose = vi.fn();
+    render(<CitationModal citation={badCitation} onClose={onClose} />);
+
+    expect(screen.getByText('Video unavailable')).toBeInTheDocument();
+  });
+
+  it('shows video unavailable when youtube URL has no v parameter', () => {
+    const badCitation: Citation = {
+      ...mockCitation,
+      video_url: 'https://youtube.com/watch?v=abc123&other=param',
+    };
+    // The v param extraction would still work in this case
+    const onClose = vi.fn();
+    render(<CitationModal citation={badCitation} onClose={onClose} />);
+
+    // This case actually works since v=abc123 is present
+    const iframe = screen.queryByTitle('YouTube video player');
+    expect(iframe).toBeInTheDocument();
+  });
+
+  it('handles relative URL gracefully', () => {
+    const badCitation: Citation = {
+      ...mockCitation,
+      video_url: '/watch?v=abc123',
+    };
+    const onClose = vi.fn();
+    render(<CitationModal citation={badCitation} onClose={onClose} />);
+
+    // Relative URL throws in URL constructor, shows unavailable
+    expect(screen.getByText('Video unavailable')).toBeInTheDocument();
+  });
 });

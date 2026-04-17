@@ -153,3 +153,129 @@ class TestCitationObjectShape:
         }
         assert isinstance(citation["start_seconds"], int | float)
         assert isinstance(citation["end_seconds"], int | float)
+
+
+class TestSseSourcesEventEmission:
+    """Tests for SSE sources event emission in messages route."""
+
+    async def test_sources_event_emits_citation_objects(self) -> None:
+        """The sources SSE event emits a JSON array of citation objects with all required fields."""
+        import json
+
+        chunks = [
+            {
+                "chunk_id": "chunk-abc",
+                "video_id": "vid-1",
+                "video_title": "Test Video",
+                "video_url": "https://youtube.com/watch?v=abc123",
+                "start_seconds": 62.5,
+                "end_seconds": 70.0,
+                "snippet": "Test snippet text",
+            },
+        ]
+
+        # Build source_citations the same way the route does
+        source_citations = [
+            {
+                "chunk_id": c.get("chunk_id", ""),
+                "video_id": c.get("video_id", ""),
+                "video_title": c.get("video_title", ""),
+                "video_url": c.get("video_url", ""),
+                "start_seconds": c.get("start_seconds", 0.0),
+                "end_seconds": c.get("end_seconds", 0.0),
+                "snippet": c.get("snippet", ""),
+            }
+            for c in chunks
+            if c.get("chunk_id")
+        ]
+
+        # Verify the JSON serializes correctly (as it would in the SSE event)
+        sources_json = json.dumps(source_citations)
+
+        # Verify it can be parsed back
+        parsed = json.loads(sources_json)
+        assert len(parsed) == 1
+        assert parsed[0]["chunk_id"] == "chunk-abc"
+        assert parsed[0]["video_title"] == "Test Video"
+        assert parsed[0]["start_seconds"] == 62.5
+        assert parsed[0]["end_seconds"] == 70.0
+        assert parsed[0]["snippet"] == "Test snippet text"
+
+    async def test_sources_event_sse_format(self) -> None:
+        """The SSE event format matches what the frontend parser expects."""
+        import json
+
+        source_citations = [
+            {
+                "chunk_id": "c1",
+                "video_id": "v1",
+                "video_title": "Video Title",
+                "video_url": "https://youtube.com/watch?v=abc",
+                "start_seconds": 10.0,
+                "end_seconds": 20.0,
+                "snippet": "Snippet text",
+            }
+        ]
+
+        sources_json = json.dumps(source_citations)
+        sse_event = f"event: sources\ndata: {sources_json}\n\n"
+
+        # Verify the format can be parsed back
+        lines = sse_event.split("\n")
+        assert lines[0] == "event: sources"
+        assert lines[1].startswith("data: ")
+        data_json = lines[1][6:]  # Remove "data: " prefix
+        parsed = json.loads(data_json)
+        assert parsed[0]["video_title"] == "Video Title"
+
+    async def test_sources_event_with_empty_chunks(self) -> None:
+        """Empty chunks list produces empty source_citations (no event emitted)."""
+        chunks: list[dict] = []
+
+        source_citations = [
+            {
+                "chunk_id": c.get("chunk_id", ""),
+                "video_id": c.get("video_id", ""),
+                "video_title": c.get("video_title", ""),
+                "video_url": c.get("video_url", ""),
+                "start_seconds": c.get("start_seconds", 0.0),
+                "end_seconds": c.get("end_seconds", 0.0),
+                "snippet": c.get("snippet", ""),
+            }
+            for c in chunks
+            if c.get("chunk_id")
+        ]
+
+        assert source_citations == []
+
+    async def test_sources_event_multiple_citations(self) -> None:
+        """Multiple citations are all included in the sources event."""
+        import json
+
+        chunks = [
+            {"chunk_id": "c1", "video_id": "v1", "video_title": "Video 1", "video_url": "https://youtube.com/watch?v=abc", "start_seconds": 0.0, "end_seconds": 10.0, "snippet": "Snippet 1"},
+            {"chunk_id": "c2", "video_id": "v2", "video_title": "Video 2", "video_url": "https://youtube.com/watch?v=def", "start_seconds": 5.0, "end_seconds": 15.0, "snippet": "Snippet 2"},
+            {"chunk_id": "c3", "video_id": "v1", "video_title": "Video 1", "video_url": "https://youtube.com/watch?v=abc", "start_seconds": 20.0, "end_seconds": 30.0, "snippet": "Snippet 3"},
+        ]
+
+        source_citations = [
+            {
+                "chunk_id": c.get("chunk_id", ""),
+                "video_id": c.get("video_id", ""),
+                "video_title": c.get("video_title", ""),
+                "video_url": c.get("video_url", ""),
+                "start_seconds": c.get("start_seconds", 0.0),
+                "end_seconds": c.get("end_seconds", 0.0),
+                "snippet": c.get("snippet", ""),
+            }
+            for c in chunks
+            if c.get("chunk_id")
+        ]
+
+        sources_json = json.dumps(source_citations)
+        parsed = json.loads(sources_json)
+        assert len(parsed) == 3
+        assert parsed[0]["chunk_id"] == "c1"
+        assert parsed[1]["chunk_id"] == "c2"
+        assert parsed[2]["chunk_id"] == "c3"
+

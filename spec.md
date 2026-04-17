@@ -193,6 +193,9 @@ app/
 | content | TEXT | Contextualized chunk text (with heading breadcrumbs) |
 | embedding | TEXT | JSON array of floats |
 | chunk_index | INTEGER | Order within video |
+| start_seconds | REAL | Segment start time in seconds (from Supadata) |
+| end_seconds | REAL | Segment end time in seconds (from Supadata) |
+| snippet | TEXT | Original transcript text for citation display |
 
 ### `conversations`
 | Column | Type | Notes |

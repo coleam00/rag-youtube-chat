@@ -57,6 +57,16 @@ class IngestRequest(BaseModel):
             for key in ("start", "end", "text"):
                 if key not in seg:
                     raise ValueError(f"Segment missing required key: '{key}'")
+            # Validate types: start and end must be numeric, text must be string
+            start = seg.get("start")
+            end = seg.get("end")
+            text = seg.get("text")
+            if not isinstance(start, int | float):
+                raise ValueError(f"Segment 'start' must be a number, got {type(start).__name__}")
+            if not isinstance(end, int | float):
+                raise ValueError(f"Segment 'end' must be a number, got {type(end).__name__}")
+            if not isinstance(text, str):
+                raise ValueError(f"Segment 'text' must be a string, got {type(text).__name__}")
         return v
 
     @field_validator("title", "description", "transcript", mode="before")
@@ -140,6 +150,8 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
         embeddings = embed_batch(chunk_texts)
     except Exception as exc:
         logger.error("Embedding batch failed for video '%s': %s", body.title, exc)
+        # Clean up the orphan video record to avoid leaving cruft
+        await repository.delete_video(video_id)
         raise HTTPException(
             status_code=502,
             detail=f"Embeddings API request failed: {exc}",

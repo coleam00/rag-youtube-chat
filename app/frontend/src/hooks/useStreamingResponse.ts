@@ -95,8 +95,8 @@ export function useStreamingResponse() {
                   sources = parsed;
                   setStreamingSources(parsed);
                 }
-              } catch {
-                // Ignore malformed sources
+              } catch (e) {
+                console.warn('[useStreamingResponse] Failed to parse sources event:', e);
               }
             } else if (data === '[DONE]') {
               // Stream complete — no action needed here

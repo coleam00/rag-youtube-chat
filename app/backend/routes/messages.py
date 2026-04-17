@@ -14,6 +14,7 @@ Orchestrates the full RAG pipeline:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -113,7 +114,7 @@ async def create_message(
     context = ""
     chunks: list[dict] = []
     try:
-        query_embedding = embed_text(user_content)
+        query_embedding = await asyncio.to_thread(embed_text, user_content)
         chunks = await retrieve(query_embedding, k=5)
         if chunks:
             context = _format_context(chunks)

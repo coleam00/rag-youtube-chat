@@ -91,6 +91,8 @@ async def retrieve(
 
         if video_id not in video_title_cache:
             video = await repository.get_video(video_id)
+            if video is None:
+                logger.warning("Video not found for video_id=%s, chunk_id=%s", video_id, chunk["id"])
             video_title_cache[video_id] = video["title"] if video else "Unknown Video"
             video_url_cache[video_id] = video["url"] if video else ""
 
