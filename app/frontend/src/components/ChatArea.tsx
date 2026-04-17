@@ -3,9 +3,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useMessages } from '../hooks/useMessages';
 import { useStreamingResponse } from '../hooks/useStreamingResponse';
 import { useToast } from '../hooks/useToast';
-import type { Message as MessageType } from '../lib/api';
+import type { Citation, Message as MessageType } from '../lib/api';
 import { RateLimitError } from '../lib/api';
 import { ChatInput, type ChatInputHandle } from './ChatInput';
+import { CitationModal } from './CitationModal';
 import { Message } from './Message';
 
 function formatResetTime(iso: string): string {
@@ -254,6 +255,8 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
   const [failedMessageText, setFailedMessageText] = useState<string | null>(null);
   // Track the temp user message ID so we can remove it on failure
   const pendingUserMsgIdRef = useRef<string | null>(null);
+  // Citation modal state
+  const [selectedCitation, setSelectedCitation] = useState<Citation | null>(null);
 
   // ── Auto-scroll logic ──
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -279,6 +282,11 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
       autoScrollRef.current = shouldAutoScroll;
       forceUpdate((n) => n + 1);
     }
+  }, []);
+
+  // ── Citation click handler (opens modal) ──
+  const handleCitationClick = useCallback((citation: Citation) => {
+    setSelectedCitation(citation);
   }, []);
 
   // ── Send handler ──
@@ -416,7 +424,13 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
               <EmptyState onStarterClick={handleStarterClick} />
             ) : (
               messages.map((msg) => (
-                <Message key={msg.id} role={msg.role} content={msg.content} sources={msg.sources} />
+                <Message
+                  key={msg.id}
+                  role={msg.role}
+                  content={msg.content}
+                  sources={msg.sources}
+                  onCitationClick={handleCitationClick}
+                />
               ))
             )}
 
@@ -427,6 +441,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
                 content={streamingContent}
                 isStreaming={true}
                 sources={streamingSources.length > 0 ? streamingSources : undefined}
+                onCitationClick={handleCitationClick}
               />
             )}
 
@@ -473,6 +488,14 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
             disabled={!conversationId}
           />
         </div>
+      )}
+
+      {/* ── Citation modal ── */}
+      {selectedCitation && (
+        <CitationModal
+          citation={selectedCitation}
+          onClose={() => setSelectedCitation(null)}
+        />
       )}
     </div>
   );

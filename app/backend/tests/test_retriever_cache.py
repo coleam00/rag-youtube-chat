@@ -34,7 +34,7 @@ async def test_cache_is_populated_on_first_retrieve():
         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_gv,
     ):
         mock_lc.return_value = _CHUNK
-        mock_gv.return_value = {"title": "Test Video"}
+        mock_gv.return_value = {"title": "Test Video", "url": "https://youtube.com/watch?v=abc"}
 
         await retrieve([0.1, 0.2, 0.3])
 
@@ -51,7 +51,7 @@ async def test_cache_is_reused_on_second_retrieve():
         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_gv,
     ):
         mock_lc.return_value = _CHUNK
-        mock_gv.return_value = {"title": "Test Video"}
+        mock_gv.return_value = {"title": "Test Video", "url": "https://youtube.com/watch?v=abc"}
 
         await retrieve([0.1, 0.2, 0.3])
         await retrieve([0.1, 0.2, 0.3])
@@ -68,7 +68,7 @@ async def test_invalidate_cache_clears_cache_and_forces_reload():
         patch("backend.rag.retriever.repository.get_video", new_callable=AsyncMock) as mock_gv,
     ):
         mock_lc.return_value = _CHUNK
-        mock_gv.return_value = {"title": "Test Video"}
+        mock_gv.return_value = {"title": "Test Video", "url": "https://youtube.com/watch?v=abc"}
 
         # First call populates the cache
         await retrieve([0.1, 0.2, 0.3])

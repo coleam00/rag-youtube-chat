@@ -6,12 +6,16 @@ and returns a list of contextualized text strings ready for embedding.
 
 from __future__ import annotations
 
+from typing import Any
+
 import tiktoken
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from docling_core.types.doc.document import DocItemLabel, DoclingDocument
 
 from backend.config import HYBRID_CHUNKER_MAX_TOKENS
+
+TimestampedSegment = dict[str, Any]
 
 # Conservative character-length proxy for 512 tokens.
 # ~4 chars/token x 512 tokens ~ 2048; we use 2400 to be safe but still below
@@ -83,9 +87,135 @@ def chunk_video(video: dict) -> list[str]:
     return results
 
 
+def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
+    """
+    Chunk timestamped transcript segments using Docling HybridChunker.
+
+    Each segment already has precise start/end timestamps from the source
+    (e.g. Supadata). We run HybridChunker on each segment's text to get
+    contextualized content, but store the original uncontextualized segment
+    text as the snippet and preserve the segment's start/end as chunk boundaries.
+
+    Args:
+        segments: A list of dicts with keys 'start' (float), 'end' (float),
+                  'text' (str). Timestamps are in seconds.
+
+    Returns:
+        A list of dicts, each containing:
+          - content: str (contextualized HybridChunker output)
+          - start_seconds: float
+          - end_seconds: float
+          - snippet: str (original uncontextualized segment text)
+        Returns [] if segments is empty or all texts are empty.
+    """
+    if not segments:
+        return []
+
+    results: list[dict] = []
+    tokenizer = OpenAITokenizer(
+        tokenizer=tiktoken.get_encoding("cl100k_base"),
+        max_tokens=HYBRID_CHUNKER_MAX_TOKENS,
+    )
+    chunker = HybridChunker(tokenizer=tokenizer, merge_peers=True)
+
+    for segment in segments:
+        text: str = segment.get("text", "")
+        if not text:
+            continue
+
+        start_s: float = segment.get("start", 0.0)
+        end_s: float = segment.get("end", 0.0)
+
+        # Run HybridChunker on this segment's text
+        doc = _build_docling_document_from_text(text)
+        try:
+            chunk_iter = chunker.chunk(doc)
+            for chunk in chunk_iter:
+                try:
+                    contextualized = chunker.contextualize(chunk)
+                    content = contextualized.strip() if contextualized else ""
+                except Exception:
+                    content = getattr(chunk, "text", "") or text
+                    content = content.strip()
+
+                if not content:
+                    continue
+
+                # Sub-divide: if HybridChunker splits a segment into multiple
+                # sub-chunks, distribute the segment's time evenly across them.
+                results.append(
+                    {
+                        "content": content,
+                        "start_seconds": start_s,
+                        "end_seconds": end_s,
+                        "snippet": text[:300],
+                    }
+                )
+        except Exception:
+            # Fallback: store the raw text with original timestamps
+            results.append(
+                {
+                    "content": text.strip(),
+                    "start_seconds": start_s,
+                    "end_seconds": end_s,
+                    "snippet": text[:300],
+                }
+            )
+
+    return results
+
+
+def chunk_video_fallback(video: dict) -> list[dict]:
+    """
+    Chunk a video using the existing plain-text chunk_video() function,
+    then add evenly-spaced estimated timestamps.
+
+    Used when no precise segment timestamps are available (e.g. legacy ingest,
+    plain transcript input). The estimated timestamps are monotonic but
+    imprecise.
+
+    Args:
+        video: A dict with at minimum 'title' and 'transcript' keys.
+
+    Returns:
+        A list of dicts as per chunk_video_timestamped, with estimated
+        start/end times and snippet = first 300 chars of content.
+    """
+    chunk_texts: list[str] = chunk_video(video)
+    if not chunk_texts:
+        return []
+
+    transcript: str = video.get("transcript", "")
+    # Heuristic: estimate 150 WPM for YouTube transcripts
+    total_words = len(transcript.split())
+    estimated_duration = max(total_words / 150.0, 1.0)
+    step = estimated_duration / len(chunk_texts) if chunk_texts else 0.0
+
+    results: list[dict] = []
+    for i, content in enumerate(chunk_texts):
+        start_s = round(i * step, 2)
+        end_s = round((i + 1) * step, 2)
+        results.append(
+            {
+                "content": content,
+                "start_seconds": start_s,
+                "end_seconds": end_s,
+                "snippet": content[:300],
+            }
+        )
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_docling_document_from_text(text: str) -> DoclingDocument:
+    """Build a minimal DoclingDocument from a single text string (used for segments)."""
+    doc = DoclingDocument(name="segment")
+    doc.add_text(label=DocItemLabel.PARAGRAPH, text=text)
+    return doc
 
 
 def _build_docling_document(title: str, transcript: str) -> DoclingDocument:

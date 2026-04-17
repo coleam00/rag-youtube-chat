@@ -20,11 +20,14 @@ CREATE TABLE IF NOT EXISTS videos (
 
 CREATE_CHUNKS_TABLE = """
 CREATE TABLE IF NOT EXISTS chunks (
-    id          TEXT PRIMARY KEY,
-    video_id    TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    content     TEXT NOT NULL,
-    embedding   TEXT NOT NULL,
-    chunk_index INTEGER NOT NULL
+    id            TEXT PRIMARY KEY,
+    video_id      TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    content       TEXT NOT NULL,
+    embedding     TEXT NOT NULL,
+    chunk_index   INTEGER NOT NULL,
+    start_seconds FLOAT NOT NULL,
+    end_seconds   FLOAT NOT NULL,
+    snippet       TEXT NOT NULL
 );
 """
 
@@ -94,6 +97,67 @@ async def _migrate_conversations_user_id(db: aiosqlite.Connection) -> None:
     await db.execute("DROP TABLE IF EXISTS conversations")
 
 
+async def _migrate_add_chunk_timestamps(db: aiosqlite.Connection) -> None:
+    """One-time migration: add start_seconds, end_seconds, snippet columns to
+    chunks table for existing rows that predate the timestamp fields.
+    Uses evenly-spaced estimated timestamps based on video duration."""
+    async with db.execute("PRAGMA table_info(chunks)") as cursor:
+        columns = {row[1] for row in await cursor.fetchall()}
+    if "start_seconds" in columns:
+        return  # Already migrated
+
+    # Add new columns (SQLite ALTER TABLE ADD COLUMN handles NOT NULL with defaults)
+    await db.execute(
+        "ALTER TABLE chunks ADD COLUMN start_seconds FLOAT NOT NULL DEFAULT 0"
+    )
+    await db.execute(
+        "ALTER TABLE chunks ADD COLUMN end_seconds FLOAT NOT NULL DEFAULT 0"
+    )
+    await db.execute(
+        "ALTER TABLE chunks ADD COLUMN snippet TEXT NOT NULL DEFAULT ''"
+    )
+
+    # Backfill: for each video, fetch its chunks in order, estimate timestamps
+    # evenly-spaced across the transcript duration.
+    async with db.execute(
+        """
+        SELECT c.id, c.video_id, c.chunk_index, c.content, v.transcript
+        FROM chunks c
+        JOIN videos v ON v.id = c.video_id
+        ORDER BY c.video_id, c.chunk_index
+        """
+    ) as cursor:
+        rows = await cursor.fetchall()
+
+    # Group by video_id to compute per-video estimates
+    video_chunks: dict[str, list[dict]] = {}
+    for row in rows:
+        vid_id = row[1]
+        if vid_id not in video_chunks:
+            video_chunks[vid_id] = []
+        video_chunks[vid_id].append({"id": row[0], "transcript": row[4] or ""})
+
+    # Estimate timestamps per video
+    for _vid_id, chunks in video_chunks.items():
+        total_chunks = len(chunks)
+        if total_chunks == 0:
+            continue
+        # Heuristic: estimate 150 WPM for YouTube transcripts
+        total_text = " ".join(c["transcript"] for c in chunks)
+        estimated_duration = max(len(total_text.split()) / 150.0, 1.0)
+        step = estimated_duration / total_chunks
+        for i, chunk in enumerate(chunks):
+            start_s = round(i * step, 2)
+            end_s = round((i + 1) * step, 2)
+            snippet_text = chunk["transcript"][:300] if chunk["transcript"] else chunk["id"]
+            await db.execute(
+                "UPDATE chunks SET start_seconds = ?, end_seconds = ?, snippet = ? WHERE id = ?",
+                (start_s, end_s, snippet_text, chunk["id"]),
+            )
+
+    await db.commit()
+
+
 async def init_db() -> None:
     """Create all tables if they do not already exist."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -101,6 +165,7 @@ async def init_db() -> None:
         await db.execute("PRAGMA foreign_keys=ON;")
         await db.execute(CREATE_VIDEOS_TABLE)
         await db.execute(CREATE_CHUNKS_TABLE)
+        await _migrate_add_chunk_timestamps(db)
         await _migrate_conversations_user_id(db)
         await db.execute(CREATE_CONVERSATIONS_TABLE)
         await db.execute(CREATE_CONVERSATIONS_USER_ID_INDEX)

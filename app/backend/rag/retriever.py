@@ -47,6 +47,10 @@ async def retrieve(
           - content: str
           - video_id: str
           - video_title: str
+          - video_url: str
+          - start_seconds: float
+          - end_seconds: float
+          - snippet: str
           - score: float (cosine similarity, -1.0 to 1.0)
         Sorted by score descending. Returns [] if the DB has no chunks.
     """
@@ -76,8 +80,9 @@ async def retrieve(
     top_indices = np.argpartition(scores, -top_k)[-top_k:]
     top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
 
-    # Fetch video titles (cache to avoid redundant DB calls)
+    # Fetch video titles and URLs (cache to avoid redundant DB calls)
     video_title_cache: dict[str, str] = {}
+    video_url_cache: dict[str, str] = {}
 
     results: list[dict] = []
     for idx in top_indices:
@@ -87,6 +92,7 @@ async def retrieve(
         if video_id not in video_title_cache:
             video = await repository.get_video(video_id)
             video_title_cache[video_id] = video["title"] if video else "Unknown Video"
+            video_url_cache[video_id] = video["url"] if video else ""
 
         results.append(
             {
@@ -94,6 +100,10 @@ async def retrieve(
                 "content": chunk["content"],
                 "video_id": video_id,
                 "video_title": video_title_cache[video_id],
+                "video_url": video_url_cache[video_id],
+                "start_seconds": chunk.get("start_seconds", 0.0),
+                "end_seconds": chunk.get("end_seconds", 0.0),
+                "snippet": chunk.get("snippet", ""),
                 "score": float(scores[int(idx)]),
             }
         )

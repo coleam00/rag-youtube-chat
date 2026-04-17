@@ -40,7 +40,17 @@ async def test_ingest_calls_invalidate_cache_after_chunks_stored():
             new_callable=AsyncMock,
             return_value=mock_video,
         ),
-        patch("backend.routes.ingest.chunk_video", return_value=["chunk 1"]),
+        patch(
+            "backend.routes.ingest.chunk_video_fallback",
+            return_value=[
+                {
+                    "content": "chunk 1",
+                    "start_seconds": 0.0,
+                    "end_seconds": 10.0,
+                    "snippet": "chunk 1",
+                }
+            ],
+        ),
         patch("backend.routes.ingest.embed_batch", return_value=mock_embedding),
         patch("backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock),
         patch("backend.routes.ingest.retriever.invalidate_cache") as mock_invalidate,
@@ -76,7 +86,7 @@ async def test_ingest_does_not_call_invalidate_cache_on_empty_chunks():
             new_callable=AsyncMock,
             return_value=mock_video,
         ),
-        patch("backend.routes.ingest.chunk_video", return_value=[]),
+        patch("backend.routes.ingest.chunk_video_fallback", return_value=[]),
         patch("backend.routes.ingest.retriever.invalidate_cache") as mock_invalidate,
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

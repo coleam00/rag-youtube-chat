@@ -120,10 +120,20 @@ async def create_message(
     except Exception as exc:
         logger.warning("RAG retrieval failed (continuing without context): %s", exc)
 
-    # Extract unique source video titles for the SSE sources event
-    source_titles: list[str] = list(
-        dict.fromkeys(c.get("video_title", "") for c in chunks if c.get("video_title"))
-    )
+    # Build citation objects for the SSE sources event
+    source_citations: list[dict] = [
+        {
+            "chunk_id": c.get("chunk_id", ""),
+            "video_id": c.get("video_id", ""),
+            "video_title": c.get("video_title", ""),
+            "video_url": c.get("video_url", ""),
+            "start_seconds": c.get("start_seconds", 0.0),
+            "end_seconds": c.get("end_seconds", 0.0),
+            "snippet": c.get("snippet", ""),
+        }
+        for c in chunks
+        if c.get("chunk_id")
+    ]
 
     # 6. Stream the response
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -131,8 +141,8 @@ async def create_message(
         try:
             async for sse_chunk in stream_chat(llm_messages, context=context):
                 # Intercept [DONE] to inject sources event first
-                if sse_chunk == "data: [DONE]\n\n" and source_titles:
-                    sources_json = json.dumps(source_titles)
+                if sse_chunk == "data: [DONE]\n\n" and source_citations:
+                    sources_json = json.dumps(source_citations)
                     yield f"event: sources\ndata: {sources_json}\n\n"
                 full_response.append(sse_chunk)
                 yield sse_chunk
@@ -165,12 +175,18 @@ async def create_message(
 
 
 def _format_context(chunks: list[dict]) -> str:
-    """Format retrieved chunks into a context block with video title citations."""
+    """Format retrieved chunks into a context block with video title and
+    timestamp citations (mm:ss markers) to help the LLM ground its answer."""
     parts = []
     for chunk in chunks:
         video_title = chunk.get("video_title", "Unknown Video")
         content = chunk.get("content", "")
-        parts.append(f"[Source: {video_title}]\n{content}")
+        start_s = chunk.get("start_seconds", 0.0)
+        # Format as mm:ss for readability in context
+        mins = int(start_s) // 60
+        secs = int(start_s) % 60
+        timestamp = f"{mins:02d}:{secs:02d}"
+        parts.append(f"[Source: {video_title} at {timestamp}]\n{content}")
     return "\n\n---\n\n".join(parts)
 
 

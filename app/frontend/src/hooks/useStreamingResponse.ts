@@ -1,14 +1,14 @@
 import { useCallback, useState } from 'react';
-import { RateLimitError } from '../lib/api';
+import { Citation, RateLimitError } from '../lib/api';
 
 export interface StreamResult {
   fullText: string;
-  sources: string[];
+  sources: Citation[];
 }
 
 export function useStreamingResponse() {
   const [streamingContent, setStreamingContent] = useState<string>('');
-  const [streamingSources, setStreamingSources] = useState<string[]>([]);
+  const [streamingSources, setStreamingSources] = useState<Citation[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
   const startStream = useCallback(
@@ -22,7 +22,7 @@ export function useStreamingResponse() {
       setStreamingSources([]);
 
       let fullText = '';
-      let sources: string[] = [];
+      let sources: Citation[] = [];
 
       try {
         const res = await fetch(`/api/conversations/${conversationId}/messages`, {

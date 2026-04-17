@@ -89,14 +89,17 @@ async def create_chunk(
     content: str,
     embedding: list[float],
     chunk_index: int,
+    start_seconds: float,
+    end_seconds: float,
+    snippet: str,
 ) -> dict:
     chunk_id = _new_id()
     embedding_json = json.dumps(embedding)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT INTO chunks (id, video_id, content, embedding, chunk_index) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (chunk_id, video_id, content, embedding_json, chunk_index),
+            "INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (chunk_id, video_id, content, embedding_json, chunk_index, start_seconds, end_seconds, snippet),
         )
         await db.commit()
     return {
@@ -105,6 +108,9 @@ async def create_chunk(
         "content": content,
         "embedding": embedding,
         "chunk_index": chunk_index,
+        "start_seconds": start_seconds,
+        "end_seconds": end_seconds,
+        "snippet": snippet,
     }
 
 
@@ -113,7 +119,7 @@ async def list_chunks() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, video_id, content, embedding, chunk_index FROM chunks"
+            "SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet FROM chunks"
         ) as cursor:
             rows = await cursor.fetchall()
     result = []
@@ -128,7 +134,7 @@ async def list_chunks_for_video(video_id: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, video_id, content, embedding, chunk_index FROM chunks "
+            "SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet FROM chunks "
             "WHERE video_id = ? ORDER BY chunk_index",
             (video_id,),
         ) as cursor:

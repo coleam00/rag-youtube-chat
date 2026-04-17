@@ -39,14 +39,24 @@ export interface Conversation {
   preview?: string | null;
 }
 
+export interface Citation {
+  chunk_id: string;
+  video_id: string;
+  video_title: string;
+  video_url: string;
+  start_seconds: number;
+  end_seconds: number;
+  snippet: string;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
-  /** RAG source video titles — only populated for freshly-streamed assistant messages */
-  sources?: string[];
+  /** RAG citations — only populated for freshly-streamed assistant messages */
+  sources?: Citation[];
 }
 
 export interface ConversationWithMessages extends Conversation {

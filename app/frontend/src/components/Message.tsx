@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Citation } from '../lib/api';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface MessageProps {
@@ -6,8 +7,10 @@ interface MessageProps {
   content: string;
   /** When true and content is empty, renders typing indicator */
   isStreaming?: boolean;
-  /** RAG source video titles to display below the message */
-  sources?: string[];
+  /** RAG citations to display below the message */
+  sources?: Citation[];
+  /** Called when the user clicks a citation chip */
+  onCitationClick?: (citation: Citation) => void;
 }
 
 // ── Typing indicator (3 pulsing dots) ────────────────────────────
@@ -22,7 +25,20 @@ function TypingIndicator() {
 }
 
 // ── Source citations section ──────────────────────────────────────
-function SourceCitations({ sources }: { sources: string[] }) {
+function formatTimestamp(seconds: number): string {
+  const s = Math.floor(seconds);
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function SourceCitations({
+  sources,
+  onCitationClick,
+}: {
+  sources: Citation[];
+  onCitationClick?: (citation: Citation) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   if (!sources || sources.length === 0) return null;
@@ -68,13 +84,14 @@ function SourceCitations({ sources }: { sources: string[] }) {
         Sources ({sources.length})
       </button>
 
-      {/* Source chips */}
+      {/* Citation chips */}
       {expanded && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {sources.map((title, i) => (
-            <span
-              key={`${title}-${i}`}
-              title={title}
+          {sources.map((citation, i) => (
+            <button
+              key={`${citation.chunk_id}-${i}`}
+              onClick={() => onCitationClick?.(citation)}
+              title={`${citation.video_title} at ${formatTimestamp(citation.start_seconds)}\n${citation.snippet}`}
               style={{
                 display: 'inline-block',
                 padding: '3px 10px',
@@ -87,10 +104,12 @@ function SourceCitations({ sources }: { sources: string[] }) {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
               }}
             >
-              {title}
-            </span>
+              {formatTimestamp(citation.start_seconds)} — {citation.video_title}
+            </button>
           ))}
         </div>
       )}
@@ -99,7 +118,13 @@ function SourceCitations({ sources }: { sources: string[] }) {
 }
 
 // ── Main message component ────────────────────────────────────────
-export function Message({ role, content, isStreaming, sources }: MessageProps) {
+export function Message({
+  role,
+  content,
+  isStreaming,
+  sources,
+  onCitationClick,
+}: MessageProps) {
   const isUser = role === 'user';
   const hasSources = !isUser && Array.isArray(sources) && sources.length > 0;
 
@@ -130,7 +155,7 @@ export function Message({ role, content, isStreaming, sources }: MessageProps) {
         ) : (
           <>
             <MarkdownRenderer content={content} />
-            {hasSources && <SourceCitations sources={sources} />}
+            {hasSources && <SourceCitations sources={sources} onCitationClick={onCitationClick} />}
           </>
         )}
       </div>
