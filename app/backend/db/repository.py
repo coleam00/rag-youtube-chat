@@ -298,3 +298,134 @@ async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Channel sync runs
+# ---------------------------------------------------------------------------
+
+
+async def create_sync_run(*, sync_run_id: str, started_at: str) -> dict:
+    """Create a new channel sync run record."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO channel_sync_runs (id, status, videos_total, videos_new, videos_error, started_at) "
+            "VALUES (?, 'running', 0, 0, 0, ?)",
+            (sync_run_id, started_at),
+        )
+        await db.commit()
+    return {
+        "id": sync_run_id,
+        "status": "running",
+        "videos_total": 0,
+        "videos_new": 0,
+        "videos_error": 0,
+        "started_at": started_at,
+        "finished_at": None,
+    }
+
+
+async def update_sync_run(
+    *,
+    sync_run_id: str,
+    status: str,
+    finished_at: str | None = None,
+    videos_total: int = 0,
+    videos_new: int = 0,
+    videos_error: int = 0,
+) -> bool:
+    """Update channel sync run counts and optionally mark as finished."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            UPDATE channel_sync_runs
+            SET status = ?, finished_at = ?, videos_total = ?, videos_new = ?, videos_error = ?
+            WHERE id = ?
+            """,
+            (status, finished_at, videos_total, videos_new, videos_error, sync_run_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def list_sync_runs(limit: int = 10) -> list[dict]:
+    """List recent channel sync runs."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT * FROM channel_sync_runs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Channel sync videos
+# ---------------------------------------------------------------------------
+
+
+async def create_sync_video(
+    *,
+    sync_run_id: str,
+    youtube_video_id: str,
+    status: str,
+) -> dict:
+    """Record a video within a sync run."""
+    vid_id = _new_id()
+    now = _now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO channel_sync_videos (id, sync_run_id, youtube_video_id, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (vid_id, sync_run_id, youtube_video_id, status, now),
+        )
+        await db.commit()
+    return {
+        "id": vid_id,
+        "sync_run_id": sync_run_id,
+        "youtube_video_id": youtube_video_id,
+        "status": status,
+        "error_message": None,
+        "created_at": now,
+    }
+
+
+async def update_sync_video_status(
+    video_id: str, status: str, error_message: str | None = None
+) -> bool:
+    """Update a sync video's status, optionally recording an error."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE channel_sync_videos SET status = ?, error_message = ? WHERE id = ?",
+            (status, error_message, video_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def get_video_by_youtube_id(youtube_video_id: str) -> dict | None:
+    """Check if a video has already been ingested by youtube_video_id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM videos WHERE url LIKE ?", (f"%{youtube_video_id}%",)
+        ) as cursor:
+            row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def list_sync_videos_for_run(sync_run_id: str) -> list[dict]:
+    """List all sync video records for a given sync run."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM channel_sync_videos WHERE sync_run_id = ? ORDER BY created_at",
+            (sync_run_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(r) for r in rows]

@@ -78,6 +78,15 @@ JWT_EXPIRY_SECONDS: int = 7 * 24 * 60 * 60  # 7 days
 RETRIEVAL_TOP_K: int = 5
 HYBRID_CHUNKER_MAX_TOKENS: int = 512
 
+# Supadata — required for channel sync (YouTube transcript ingestion)
+SUPADATA_API_KEY: str = os.environ.get("SUPADATA_API_KEY", "")
+
+# YouTube channel to sync from (used by POST /api/channels/sync)
+YOUTUBE_CHANNEL_ID: str = os.environ.get("YOUTUBE_CHANNEL_ID", "")
+
+# Content type filter for channel sync: 'all', 'video', 'short', 'live'
+CHANNEL_SYNC_TYPE: str = os.environ.get("CHANNEL_SYNC_TYPE", "video")
+
 # Server ports
 BACKEND_PORT: int = 8000
 FRONTEND_PORT: int = 5173

@@ -52,6 +52,33 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 """
 
+CREATE_CHANNEL_SYNC_RUNS_TABLE = """
+CREATE TABLE IF NOT EXISTS channel_sync_runs (
+    id           TEXT PRIMARY KEY,
+    status       TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+    videos_total INTEGER NOT NULL DEFAULT 0,
+    videos_new   INTEGER NOT NULL DEFAULT 0,
+    videos_error INTEGER NOT NULL DEFAULT 0,
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT
+);
+"""
+
+CREATE_CHANNEL_SYNC_VIDEOS_TABLE = """
+CREATE TABLE IF NOT EXISTS channel_sync_videos (
+    id               TEXT PRIMARY KEY,
+    sync_run_id      TEXT NOT NULL REFERENCES channel_sync_runs(id) ON DELETE CASCADE,
+    youtube_video_id TEXT NOT NULL,
+    status           TEXT NOT NULL CHECK(status IN ('pending', 'ingested', 'error')),
+    error_message    TEXT,
+    created_at       TEXT NOT NULL
+);
+"""
+
+CREATE_CHANNEL_SYNC_VIDEOS_SYNC_RUN_ID_INDEX = """
+CREATE INDEX IF NOT EXISTS channel_sync_videos_sync_run_id_idx ON channel_sync_videos (sync_run_id);
+"""
+
 
 async def _migrate_conversations_user_id(db: aiosqlite.Connection) -> None:
     """One-time migration: drop legacy conversations/messages tables if they
@@ -78,5 +105,8 @@ async def init_db() -> None:
         await db.execute(CREATE_CONVERSATIONS_TABLE)
         await db.execute(CREATE_CONVERSATIONS_USER_ID_INDEX)
         await db.execute(CREATE_MESSAGES_TABLE)
+        await db.execute(CREATE_CHANNEL_SYNC_RUNS_TABLE)
+        await db.execute(CREATE_CHANNEL_SYNC_VIDEOS_TABLE)
+        await db.execute(CREATE_CHANNEL_SYNC_VIDEOS_SYNC_RUN_ID_INDEX)
         await db.commit()
     print(f"Database initialised at {DB_PATH}")

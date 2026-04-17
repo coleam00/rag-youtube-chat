@@ -35,6 +35,7 @@ dependencies = [
     "bcrypt",
     "pyjwt",
     "email-validator",
+    "supadata",
 ]
 
 [project.optional-dependencies]
