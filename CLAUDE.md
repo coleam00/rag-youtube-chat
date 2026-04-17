@@ -361,6 +361,27 @@ On /opt/dynachat host:
 
 This is the sole place where production-only verification happens. The factory is never the entity running that smoke-test.
 
+### Testing against the snapshot database
+
+For tests that genuinely need realistic data volume (retrieval quality, query plan behavior, schema migrations), the factory has access to a **snapshot database** — not the live one. Architecture:
+
+- **Live DB:** `dynachat` on `127.0.0.1:5433`. App-only. Role `factory_user` has zero privileges on this database (no direct grant, no PUBLIC grant).
+- **Snapshot DB:** `dynachat_factory` on the same Postgres instance, refreshed nightly at 03:00 UTC from `pg_dump dynachat | pg_restore`. Role `factory_user` has full read-write on this database — drop tables, bulk-insert, run destructive migrations, whatever. Next refresh heals any damage.
+
+The factory's connection string lives in `/home/archon/.dynachat-factory.env` (readable only by the `archon` user, mode 600):
+
+```
+DATABASE_URL=postgresql://factory_user:<password>@127.0.0.1:5433/dynachat_factory
+```
+
+When a factory workflow runs integration tests that need real-shaped data, it sources this env file and the app connects through `config.py` as usual — no code change needed, just a different `DATABASE_URL` at runtime.
+
+**Rules for factory use of the snapshot DB:**
+1. **Never override the URL to point at `dynachat`.** Postgres-level ACL blocks this anyway, but don't try.
+2. **The snapshot is up to 24h stale.** If a test needs today's newly-ingested video, it belongs in a manual smoke-test, not an automated integration test.
+3. **The refresh is managed by systemd** (`dynachat-factory-snapshot.timer` on the VPS). The factory should not invoke it — if a fresher snapshot is needed, ask a human to `sudo systemctl start dynachat-factory-snapshot.service`.
+4. **Unit tests still use fixtures** — see "Testing external APIs" above. The snapshot DB is for the integration tier only, where volume matters.
+
 ### Redeploy flow
 
 After a merge to `main` on prod, the deploy is (for now) manual:
