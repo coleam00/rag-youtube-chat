@@ -471,7 +471,10 @@ Any PR touching them must be human-authored:
 
 - `app/backend/auth/` (entire directory)
 - `app/backend/routes/auth.py`
+- `app/backend/routes/conversations.py` — implements MISSION §10 #3 (owner-only conversations)
+- `app/backend/routes/messages.py` — implements MISSION §10 #3 (owner-only conversations)
 - `app/backend/db/users_repo.py`
+- `app/backend/db/repository.py` — conversation/message `user_id` scoping functions specifically
 - `app/backend/main.py` — auth router registration and `Depends(get_current_user)` wiring
 - `app/backend/config.py` — `JWT_SECRET` / `DATABASE_URL` handling
 - CORS middleware configuration anywhere in the backend

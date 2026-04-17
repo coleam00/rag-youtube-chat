@@ -2,13 +2,14 @@
 Message routes — POST /api/conversations/{conv_id}/messages
 
 Orchestrates the full RAG pipeline:
-  1. Save user message
-  2. Embed the query
-  3. Retrieve top-K relevant chunks
-  4. Build prompt with context
-  5. Stream LLM response as SSE
-  6. Send sources event before [DONE]
-  7. Persist assistant message after stream completes
+  1. Verify conversation ownership (404 cross-user, no leak)
+  2. Save user message
+  3. Embed the query
+  4. Retrieve top-K relevant chunks
+  5. Build prompt with context
+  6. Stream LLM response as SSE
+  7. Send sources event before [DONE]
+  8. Persist assistant message after stream completes
 """
 
 from __future__ import annotations
@@ -16,11 +17,13 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+from backend.auth.dependencies import get_current_user
 from backend.db import repository
 from backend.llm.openrouter import stream_chat
 from backend.rag.embeddings import embed_text
@@ -48,7 +51,11 @@ class MessageCreate(BaseModel):
 
 
 @router.post("/conversations/{conv_id}/messages")
-async def create_message(conv_id: str, body: MessageCreate):
+async def create_message(
+    conv_id: str,
+    body: MessageCreate,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
     """
     Send a user message and stream the RAG-grounded assistant response.
 
@@ -57,23 +64,30 @@ async def create_message(conv_id: str, body: MessageCreate):
         Each SSE event: "data: <token>\n\n"
         Final event: "data: [DONE]\n\n"
     """
-    # 1. Verify conversation exists
-    conv = await repository.get_conversation(conv_id)
+    user_id = str(current_user["id"])
+
+    # 1. Verify conversation exists AND belongs to current user.
+    # 404 (not 403) — don't leak existence of other users' conversations.
+    conv = await repository.get_conversation(conv_id, user_id=user_id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Content is already validated non-empty by Pydantic; strip for storage
     user_content = body.content.strip()
 
-    # 2. Persist the user message
-    await repository.create_message(
+    # 2. Persist the user message. create_message re-checks ownership atomically
+    # so a race between the check above and insert can't leak cross-user.
+    inserted = await repository.create_message(
         conversation_id=conv_id,
+        user_id=user_id,
         role="user",
         content=user_content,
     )
+    if inserted is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     # 3. Retrieve conversation history for LLM context
-    all_messages = await repository.list_messages(conv_id)
+    all_messages = await repository.list_messages(conv_id, user_id=user_id)
     llm_messages = [{"role": m["role"], "content": m["content"]} for m in all_messages]
 
     # 4. Embed the user query and retrieve relevant chunks
@@ -110,11 +124,12 @@ async def create_message(conv_id: str, body: MessageCreate):
                 try:
                     await repository.create_message(
                         conversation_id=conv_id,
+                        user_id=user_id,
                         role="assistant",
                         content=assistant_text,
                     )
                     # Auto-generate title on first assistant reply
-                    await _maybe_set_conversation_title(conv_id, user_content)
+                    await _maybe_set_conversation_title(conv_id, user_id, user_content)
                 except Exception as exc:
                     logger.error("Failed to persist assistant message: %s", exc)
 
@@ -168,12 +183,14 @@ def _extract_text_from_sse(sse_chunks: list[str]) -> str:
     return "".join(tokens)
 
 
-async def _maybe_set_conversation_title(conv_id: str, first_user_message: str) -> None:
+async def _maybe_set_conversation_title(
+    conv_id: str, user_id: str, first_user_message: str
+) -> None:
     """
     If the conversation title is still the default, auto-generate one from
     the first user message (simple truncation for Sprint 2; LLM-based in Sprint 6).
     """
-    conv = await repository.get_conversation(conv_id)
+    conv = await repository.get_conversation(conv_id, user_id=user_id)
     if not conv:
         return
     if conv.get("title") == "New Conversation":
@@ -181,4 +198,4 @@ async def _maybe_set_conversation_title(conv_id: str, first_user_message: str) -
             title = first_user_message[:47].strip() + "…"
         else:
             title = first_user_message.strip()
-        await repository.update_conversation_title(conv_id, title)
+        await repository.update_conversation_title(conv_id, user_id=user_id, title=title)

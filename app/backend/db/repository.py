@@ -155,27 +155,38 @@ async def count_chunks() -> int:
 # ---------------------------------------------------------------------------
 
 
-async def create_conversation(title: str = "New Conversation") -> dict:
+async def create_conversation(*, user_id: str, title: str = "New Conversation") -> dict:
     conv_id = _new_id()
     now = _now()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (conv_id, title, now, now),
+            "INSERT INTO conversations (id, user_id, title, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (conv_id, user_id, title, now, now),
         )
         await db.commit()
-    return {"id": conv_id, "title": title, "created_at": now, "updated_at": now}
+    return {
+        "id": conv_id,
+        "user_id": user_id,
+        "title": title,
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
-async def get_conversation(conv_id: str) -> dict | None:
+async def get_conversation(conv_id: str, user_id: str) -> dict | None:
+    """Return the conversation only if it belongs to the given user."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM conversations WHERE id = ?", (conv_id,)) as cursor:
+        async with db.execute(
+            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
+            (conv_id, user_id),
+        ) as cursor:
             row = await cursor.fetchone()
     return dict(row) if row else None
 
 
-async def list_conversations() -> list[dict]:
+async def list_conversations(user_id: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -187,37 +198,45 @@ async def list_conversations() -> list[dict]:
                     ORDER BY created_at DESC
                     LIMIT 1) AS preview
             FROM conversations c
+            WHERE c.user_id = ?
             ORDER BY c.updated_at DESC
-            """
+            """,
+            (user_id,),
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
 
 
-async def update_conversation_title(conv_id: str, title: str) -> None:
+async def update_conversation_title(conv_id: str, user_id: str, title: str) -> bool:
+    """Rename a conversation. Returns False if it does not belong to the user."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE conversations SET title = ?, updated_at = ? "
+            "WHERE id = ? AND user_id = ?",
+            (title, _now(), conv_id, user_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def touch_conversation(conv_id: str, user_id: str) -> None:
+    """Update the updated_at timestamp (scoped to owner; silent no-op otherwise)."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-            (title, _now(), conv_id),
+            "UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
+            (_now(), conv_id, user_id),
         )
         await db.commit()
 
 
-async def touch_conversation(conv_id: str) -> None:
-    """Update the updated_at timestamp."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE conversations SET updated_at = ? WHERE id = ?",
-            (_now(), conv_id),
-        )
-        await db.commit()
-
-
-async def delete_conversation(conv_id: str) -> bool:
+async def delete_conversation(conv_id: str, user_id: str) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         # Enable foreign keys so ON DELETE CASCADE removes associated messages
         await db.execute("PRAGMA foreign_keys=ON;")
-        cursor = await db.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+        cursor = await db.execute(
+            "DELETE FROM conversations WHERE id = ? AND user_id = ?",
+            (conv_id, user_id),
+        )
         await db.commit()
         return cursor.rowcount > 0
 
@@ -230,19 +249,31 @@ async def delete_conversation(conv_id: str) -> bool:
 async def create_message(
     *,
     conversation_id: str,
+    user_id: str,
     role: str,
     content: str,
-) -> dict:
+) -> dict | None:
+    """Insert a message. Returns None if the conversation does not belong to the user."""
     msg_id = _new_id()
     now = _now()
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (msg_id, conversation_id, role, content, now),
+        # Verify ownership atomically — INSERT only succeeds if the conversation
+        # row exists for this user. Prevents cross-user message injection even
+        # if a route handler forgets to check.
+        cursor = await db.execute(
+            """
+            INSERT INTO messages (id, conversation_id, role, content, created_at)
+            SELECT ?, ?, ?, ?, ?
+            WHERE EXISTS (
+                SELECT 1 FROM conversations WHERE id = ? AND user_id = ?
+            )
+            """,
+            (msg_id, conversation_id, role, content, now, conversation_id, user_id),
         )
         await db.commit()
-    await touch_conversation(conversation_id)
+        if cursor.rowcount == 0:
+            return None
+    await touch_conversation(conversation_id, user_id)
     return {
         "id": msg_id,
         "conversation_id": conversation_id,
@@ -252,12 +283,19 @@ async def create_message(
     }
 
 
-async def list_messages(conversation_id: str) -> list[dict]:
+async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
+    """Return messages only if the conversation belongs to the given user."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
-            (conversation_id,),
+            """
+            SELECT m.*
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            WHERE m.conversation_id = ? AND c.user_id = ?
+            ORDER BY m.created_at ASC
+            """,
+            (conversation_id, user_id),
         ) as cursor:
             rows = await cursor.fetchall()
     return [dict(r) for r in rows]
