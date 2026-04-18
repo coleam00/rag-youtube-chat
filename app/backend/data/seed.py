@@ -13,6 +13,7 @@ This ensures RAG retrieval works out-of-the-box.
 import asyncio
 import logging
 
+from backend.config import SEED_ENABLE
 from backend.db import repository
 from backend.rag.chunker import chunk_video
 from backend.rag.embeddings import embed_batch
@@ -328,10 +329,18 @@ async def run_seed() -> None:
 async def seed_if_empty() -> None:
     """
     Run seed only if needed:
+    - If SEED_ENABLE is false: skip unconditionally (prod default).
     - If no videos: full seed (create videos + chunks)
     - If videos exist but no chunks: chunk+embed existing videos
     - If both exist: skip
     """
+    if not SEED_ENABLE:
+        logger.info(
+            "SEED_ENABLE is off — skipping mock seed. "
+            "Ingest real videos via POST /api/channels/sync or the admin UI."
+        )
+        return
+
     video_count = await repository.count_videos()
     chunk_count = await repository.count_chunks()
 

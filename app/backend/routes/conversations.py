@@ -43,6 +43,19 @@ async def create_conversation(
     )
 
 
+@router.get("/conversations/search")
+async def search_conversations(
+    q: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Title-contains search. Must be declared BEFORE /conversations/{conv_id}
+    or FastAPI routes "search" to the path-parameter handler and returns 404."""
+    return await repository.search_conversations_by_title(
+        user_id=str(current_user["id"]),
+        query=q,
+    )
+
+
 @router.get("/conversations/{conv_id}")
 async def get_conversation(
     conv_id: str,
@@ -79,17 +92,6 @@ async def rename_conversation(
         raise HTTPException(status_code=404, detail="Conversation not found")
     conv = await repository.get_conversation(conv_id, user_id=str(current_user["id"]))
     return conv
-
-
-@router.get("/conversations/search")
-async def search_conversations(
-    q: str,
-    current_user: dict[str, Any] = Depends(get_current_user),
-):
-    return await repository.search_conversations_by_title(
-        user_id=str(current_user["id"]),
-        query=q,
-    )
 
 
 @router.get("/videos")

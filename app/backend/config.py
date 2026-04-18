@@ -102,6 +102,19 @@ YOUTUBE_CHANNEL_ID: str = os.environ.get("YOUTUBE_CHANNEL_ID", "")
 # Content type filter for channel sync: 'all', 'video', 'short', 'live'
 CHANNEL_SYNC_TYPE: str = os.environ.get("CHANNEL_SYNC_TYPE", "video")
 
+# Whether startup should auto-seed the 10 mock videos bundled in data/seed.py.
+# Defaults to OFF — the seed fixtures use synthesised YouTube IDs
+# (AgntBld001a, etc.) which break the citation modal in production. Set
+# SEED_ENABLE=true only for local development when you want the mock library
+# without running a channel sync. Production gets its data via
+# POST /api/channels/sync against YOUTUBE_CHANNEL_ID.
+SEED_ENABLE: bool = os.environ.get("SEED_ENABLE", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 # Server ports
 BACKEND_PORT: int = 8000
 FRONTEND_PORT: int = 5173

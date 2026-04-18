@@ -24,8 +24,15 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _now() -> datetime:
+    """Return an aware UTC datetime.
+
+    All created_at / updated_at columns are TIMESTAMPTZ in Postgres. asyncpg
+    requires a datetime.datetime for those — strings raise DataError at
+    bind-time. Return a datetime rather than an ISO string so every repository
+    call site Just Works.
+    """
+    return datetime.now(UTC)
 
 
 def _acquire() -> asyncpg.pool.PoolAcquireContext:
@@ -337,21 +344,26 @@ async def delete_conversation(conv_id: str, user_id: str) -> bool:
 
 
 async def search_conversations_by_title(user_id: str, query: str, limit: int = 20) -> list[dict]:
-    """Return conversations owned by user where title contains substring (case-insensitive)."""
-    try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            db.row_factory = aiosqlite.Row
-            pattern = f"%{query.lower()}%"
-            async with db.execute(
-                "SELECT id, title, created_at, updated_at FROM conversations "
-                "WHERE user_id = ? AND LOWER(title) LIKE ? ORDER BY updated_at DESC LIMIT ?",
-                (user_id, pattern, limit),
-            ) as cursor:
-                rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
-    except aiosqlite.Error as e:
-        logger.error("search_conversations_by_title failed for user_id=%s: %s", user_id, e)
-        raise
+    """Return conversations owned by user where title contains substring (case-insensitive).
+
+    Ported from the SQLite era: uses ILIKE in Postgres so the match is
+    case-insensitive in one step (no need to lower() both sides).
+    """
+    pattern = f"%{query}%"
+    async with _acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, title, created_at, updated_at
+            FROM conversations
+            WHERE user_id = $1 AND title ILIKE $2
+            ORDER BY updated_at DESC
+            LIMIT $3
+            """,
+            user_id,
+            pattern,
+            limit,
+        )
+    return [dict(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------

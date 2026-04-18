@@ -47,8 +47,8 @@ class SyncRun(BaseModel):
     videos_total: int
     videos_new: int
     videos_error: int
-    started_at: str
-    finished_at: str | None
+    started_at: datetime
+    finished_at: datetime | None
 
 
 class SyncRunsResponse(BaseModel):
@@ -66,8 +66,9 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _now() -> datetime:
+    """Aware UTC datetime — TIMESTAMPTZ columns need datetime, not ISO strings."""
+    return datetime.now(UTC)
 
 
 @router.post("/channels/sync", response_model=SyncResponse)
