@@ -137,7 +137,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             if (!isDisabled) e.currentTarget.style.background = '#1d4ed8';
           }}
           onMouseLeave={(e) => {
-            if (!isDisabled) e.currentTarget.style.background = isDisabled ? '#1e293b' : '#3b82f6';
+            if (!isDisabled) e.currentTarget.style.background = '#3b82f6';
           }}
         >
           {isStreaming ? (
