@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, status
 from pydantic import AnyUrl, BaseModel, Field
 
-from backend.config import CHANNEL_SYNC_TYPE, SUPADATA_API_KEY, YOUTUBE_CHANNEL_ID
+from backend.config import SUPADATA_API_KEY, YOUTUBE_CHANNEL_ID
 from backend.db import repository as repo
 from backend.ingest.supadata_client import SupadataClient, SupadataError
 from backend.ingest.youtube_url import parse_youtube_url
@@ -90,9 +90,7 @@ async def _fetch_chunks_and_embeddings(url_str: str) -> tuple[dict, list[dict]]:
             supadata_data = await client.fetch_transcript(url_str, lang="en")
         except SupadataError as exc:
             logger.error("Supadata fetch failed for '%s': %s", url_str, exc)
-            raise HTTPException(
-                status_code=503, detail=f"Transcript fetch failed: {exc}"
-            ) from exc
+            raise HTTPException(status_code=503, detail=f"Transcript fetch failed: {exc}") from exc
     finally:
         await client.close()
 

@@ -69,7 +69,7 @@ describe('useStreamingResponse SSE parsing', () => {
     expect(sources).toHaveLength(0);
     expect(warnMock).toHaveBeenCalledWith(
       '[useStreamingResponse] Failed to parse sources event:',
-      expect.any(Error)
+      expect.any(Error),
     );
 
     console.warn = originalWarn;

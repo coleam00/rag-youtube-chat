@@ -5,13 +5,10 @@ Revises:
 Create Date: 2026-04-18
 
 """
+
 from __future__ import annotations
 
-from typing import Sequence
-
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
@@ -125,9 +122,7 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS conversations_user_id_idx ON conversations (user_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS conversations_user_id_idx ON conversations (user_id)")
 
     # --- messages --------------------------------------------------------
     op.execute(

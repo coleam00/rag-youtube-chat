@@ -11,9 +11,10 @@ from __future__ import annotations
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -35,6 +36,7 @@ def get_database_url() -> str:
     url = config.get_main_option("sqlalchemy.url", "")
     if not url:
         import os
+
         url = os.environ.get("DATABASE_URL", "")
     return url
 
@@ -54,9 +56,7 @@ async def run_async_migrations() -> None:
     if run_async_engine is None:
         url = get_database_url()
         if not url:
-            raise RuntimeError(
-                "DATABASE_URL is not set. Cannot run Alembic migrations."
-            )
+            raise RuntimeError("DATABASE_URL is not set. Cannot run Alembic migrations.")
         # Create a dedicated pool for migrations (separate from app pool).
         # NullPool so each check-out is a fresh connection.
         run_async_engine = create_async_engine(

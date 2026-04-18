@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Citation, RateLimitError } from '../lib/api';
+import { type Citation, RateLimitError } from '../lib/api';
 
 export interface StreamResult {
   fullText: string;

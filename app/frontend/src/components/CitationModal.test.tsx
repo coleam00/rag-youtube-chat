@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CitationModal } from './CitationModal';
 import type { Citation } from '../lib/api';
+import { CitationModal } from './CitationModal';
 
 const mockCitation: Citation = {
   chunk_id: 'chunk-1',
@@ -41,7 +41,9 @@ describe('CitationModal', () => {
     render(<CitationModal citation={mockCitation} onClose={onClose} />);
 
     expect(
-      screen.getByText('This is a sample transcript snippet that appears in the video at the cited moment.')
+      screen.getByText(
+        'This is a sample transcript snippet that appears in the video at the cited moment.',
+      ),
     ).toBeInTheDocument();
   });
 

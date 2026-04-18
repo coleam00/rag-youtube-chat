@@ -402,9 +402,7 @@ async def test_add_video_rejects_duplicate(client):
         transcript="t",
     )
 
-    fake_supadata = AsyncMock(
-        return_value={"title": "T", "description": "D", "transcript": "tx"}
-    )
+    fake_supadata = AsyncMock(return_value={"title": "T", "description": "D", "transcript": "tx"})
 
     await _signup(client, ADMIN_EMAIL)
 

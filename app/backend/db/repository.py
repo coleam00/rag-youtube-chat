@@ -53,7 +53,12 @@ async def create_video(
             INSERT INTO videos (id, title, description, url, transcript, created_at)
             VALUES ($1, $2, $3, $4, $5, $6)
             """,
-            vid_id, title, description, url, transcript, now,
+            vid_id,
+            title,
+            description,
+            url,
+            transcript,
+            now,
         )
     return {
         "id": vid_id,
@@ -117,7 +122,14 @@ async def create_chunk(
             INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
-            chunk_id, video_id, content, embedding_json, chunk_index, start_seconds, end_seconds, snippet,
+            chunk_id,
+            video_id,
+            content,
+            embedding_json,
+            chunk_index,
+            start_seconds,
+            end_seconds,
+            snippet,
         )
     return {
         "id": chunk_id,
@@ -206,24 +218,23 @@ async def replace_chunks_for_video(
     Caller is responsible for fetching/chunking/embedding BEFORE invoking this
     so a Supadata or OpenRouter failure cannot leave the video chunkless.
     """
-    async with await _acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("DELETE FROM chunks WHERE video_id = $1", video_id)
-            for c in chunks:
-                await conn.execute(
-                    """
+    async with await _acquire() as conn, conn.transaction():
+        await conn.execute("DELETE FROM chunks WHERE video_id = $1", video_id)
+        for c in chunks:
+            await conn.execute(
+                """
                     INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     """,
-                    _new_id(),
-                    video_id,
-                    c["content"],
-                    json.dumps(c["embedding"]),
-                    c["chunk_index"],
-                    c.get("start_seconds", 0.0),
-                    c.get("end_seconds", 0.0),
-                    c.get("snippet", ""),
-                )
+                _new_id(),
+                video_id,
+                c["content"],
+                json.dumps(c["embedding"]),
+                c["chunk_index"],
+                c.get("start_seconds", 0.0),
+                c.get("end_seconds", 0.0),
+                c.get("snippet", ""),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +251,11 @@ async def create_conversation(*, user_id: str, title: str = "New Conversation") 
             INSERT INTO conversations (id, user_id, title, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5)
             """,
-            conv_id, user_id, title, now, now,
+            conv_id,
+            user_id,
+            title,
+            now,
+            now,
         )
     return {
         "id": conv_id,
@@ -256,7 +271,8 @@ async def get_conversation(conv_id: str, user_id: str) -> dict | None:
     async with await _acquire() as conn:
         row = await conn.fetchrow(
             "SELECT * FROM conversations WHERE id = $1 AND user_id = $2",
-            conv_id, user_id,
+            conv_id,
+            user_id,
         )
     return dict(row) if row else None
 
@@ -285,7 +301,10 @@ async def update_conversation_title(conv_id: str, user_id: str, title: str) -> b
     async with await _acquire() as conn:
         result = await conn.execute(
             "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
-            title, _now(), conv_id, user_id,
+            title,
+            _now(),
+            conv_id,
+            user_id,
         )
         return result != "UPDATE 0"
 
@@ -295,7 +314,9 @@ async def touch_conversation(conv_id: str, user_id: str) -> None:
     async with await _acquire() as conn:
         await conn.execute(
             "UPDATE conversations SET updated_at = $1 WHERE id = $2 AND user_id = $3",
-            _now(), conv_id, user_id,
+            _now(),
+            conv_id,
+            user_id,
         )
 
 
@@ -303,7 +324,8 @@ async def delete_conversation(conv_id: str, user_id: str) -> bool:
     async with await _acquire() as conn:
         result = await conn.execute(
             "DELETE FROM conversations WHERE id = $1 AND user_id = $2",
-            conv_id, user_id,
+            conv_id,
+            user_id,
         )
         return result != "DELETE 0"
 
@@ -353,7 +375,13 @@ async def create_message(
                 SELECT 1 FROM conversations WHERE id = $6 AND user_id = $7
             )
             """,
-            msg_id, conversation_id, role, content, now, conversation_id, user_id,
+            msg_id,
+            conversation_id,
+            role,
+            content,
+            now,
+            conversation_id,
+            user_id,
         )
         if result == "INSERT 0 0":
             return None
@@ -378,7 +406,8 @@ async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
             WHERE m.conversation_id = $1 AND c.user_id = $2
             ORDER BY m.created_at ASC
             """,
-            conversation_id, user_id,
+            conversation_id,
+            user_id,
         )
     return [dict(r) for r in rows]
 
@@ -396,7 +425,8 @@ async def create_sync_run(*, sync_run_id: str, started_at: str) -> dict:
             INSERT INTO channel_sync_runs (id, status, videos_total, videos_new, videos_error, started_at)
             VALUES ($1, 'running', 0, 0, 0, $2)
             """,
-            sync_run_id, started_at,
+            sync_run_id,
+            started_at,
         )
     return {
         "id": sync_run_id,
@@ -426,7 +456,12 @@ async def update_sync_run(
             SET status = $1, finished_at = $2, videos_total = $3, videos_new = $4, videos_error = $5
             WHERE id = $6
             """,
-            status, finished_at, videos_total, videos_new, videos_error, sync_run_id,
+            status,
+            finished_at,
+            videos_total,
+            videos_new,
+            videos_error,
+            sync_run_id,
         )
         return result != "UPDATE 0"
 
@@ -465,7 +500,11 @@ async def create_sync_video(
             INSERT INTO channel_sync_videos (id, sync_run_id, youtube_video_id, status, created_at)
             VALUES ($1, $2, $3, $4, $5)
             """,
-            vid_id, sync_run_id, youtube_video_id, status, now,
+            vid_id,
+            sync_run_id,
+            youtube_video_id,
+            status,
+            now,
         )
     return {
         "id": vid_id,
@@ -484,7 +523,9 @@ async def update_sync_video_status(
     async with await _acquire() as conn:
         result = await conn.execute(
             "UPDATE channel_sync_videos SET status = $1, error_message = $2 WHERE id = $3",
-            status, error_message, video_id,
+            status,
+            error_message,
+            video_id,
         )
         return result != "UPDATE 0"
 

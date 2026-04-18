@@ -25,9 +25,7 @@ async def init_pg_pool() -> asyncpg.Pool:
     if _pool is not None:
         return _pool
     if not DATABASE_URL:
-        raise RuntimeError(
-            "DATABASE_URL is not set; cannot initialise Postgres pool."
-        )
+        raise RuntimeError("DATABASE_URL is not set; cannot initialise Postgres pool.")
     logger.info("Connecting to Postgres…")
     _pool = await asyncpg.create_pool(
         dsn=DATABASE_URL,

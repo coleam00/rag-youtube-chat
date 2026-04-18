@@ -556,10 +556,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
 
       {/* ── Citation modal ── */}
       {selectedCitation && (
-        <CitationModal
-          citation={selectedCitation}
-          onClose={() => setSelectedCitation(null)}
-        />
+        <CitationModal citation={selectedCitation} onClose={() => setSelectedCitation(null)} />
       )}
     </div>
   );

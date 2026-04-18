@@ -25,11 +25,8 @@ via dump_sqlite.sh before running.
 
 from __future__ import annotations
 
-import json
 import sys
-import time
 from pathlib import Path
-from typing import Any
 
 import aiosqlite
 import asyncpg
@@ -44,6 +41,7 @@ def _parse_timestamp(value: str | None) -> str | None:
 
 def _new_id() -> str:
     import uuid
+
     return str(uuid.uuid4())
 
 
@@ -110,7 +108,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "videos",
             "SELECT id, title, description, url, transcript, created_at FROM videos",
             "INSERT INTO videos (id, title, description, url, transcript, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
@@ -132,7 +131,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "chunks",
             "SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet FROM chunks",
             "INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
@@ -151,7 +151,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "conversations",
             "SELECT id, user_id, title, created_at, updated_at FROM conversations",
             "INSERT INTO conversations (id, user_id, title, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)",
@@ -170,7 +171,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "messages",
             "SELECT id, conversation_id, role, content, created_at FROM messages",
             "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES ($1, $2, $3, $4, $5)",
@@ -191,7 +193,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "channel_sync_runs",
             "SELECT id, status, videos_total, videos_new, videos_error, started_at, finished_at FROM channel_sync_runs",
             "INSERT INTO channel_sync_runs (id, status, videos_total, videos_new, videos_error, started_at, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -211,7 +214,8 @@ async def migrate(sqlite_path: Path, pg_dsn: str) -> None:
             )
 
         n = await _migrate_table(
-            sqlite_conn, pg_conn,
+            sqlite_conn,
+            pg_conn,
             "channel_sync_videos",
             "SELECT id, sync_run_id, youtube_video_id, status, error_message, created_at FROM channel_sync_videos",
             "INSERT INTO channel_sync_videos (id, sync_run_id, youtube_video_id, status, error_message, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
@@ -242,6 +246,7 @@ def main() -> None:
         sys.exit(1)
 
     import asyncio
+
     asyncio.run(migrate(sqlite_path, pg_dsn))
 
 

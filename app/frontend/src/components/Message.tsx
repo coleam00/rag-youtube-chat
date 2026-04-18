@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Citation } from '../lib/api';
+import type { Citation } from '../lib/api';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface MessageProps {
@@ -118,13 +118,7 @@ function SourceCitations({
 }
 
 // ── Main message component ────────────────────────────────────────
-export function Message({
-  role,
-  content,
-  isStreaming,
-  sources,
-  onCitationClick,
-}: MessageProps) {
+export function Message({ role, content, isStreaming, sources, onCitationClick }: MessageProps) {
   const isUser = role === 'user';
   const hasSources = !isUser && Array.isArray(sources) && sources.length > 0;
 

@@ -13,7 +13,9 @@ from backend.db.schema import _migrate_add_chunk_timestamps
 
 
 class TestMigrateAddChunkTimestamps:
-    async def test_guard_prevents_re_execution(self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_guard_prevents_re_execution(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """If start_seconds column already exists, migration returns immediately."""
         import aiosqlite
 
