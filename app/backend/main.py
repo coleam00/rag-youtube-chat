@@ -5,6 +5,7 @@ Handles lifespan startup (DB init + seeding) and route registration.
 
 import logging
 import os
+import subprocess
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
@@ -16,10 +17,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.auth.dependencies import get_current_admin, get_current_user
-from backend.config import DATABASE_URL, DB_PATH
+from backend.config import DATABASE_URL
 from backend.data.seed import seed_if_empty
-from backend.db.postgres import close_pg_pool, init_signup_attempts_schema, init_users_schema
-from backend.db.schema import init_db
+from backend.db.postgres import close_pg_pool, init_pg_pool
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,22 +27,40 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: initialise DB tables (SQLite + Postgres), then seed if empty."""
-    logger.info("Starting up — initialising database…")
-    await init_db()
-    if DATABASE_URL:
-        logger.info("DATABASE_URL set — initialising Postgres users schema…")
-        await init_users_schema()
-        await init_signup_attempts_schema()
-    else:
-        logger.warning("DATABASE_URL not set; auth endpoints will fail until configured.")
-    logger.info("Database ready. Checking seed data…")
+    """Startup: run Alembic migrations, init Postgres pool, then seed if empty."""
+    logger.info("Starting up — running Alembic migrations…")
+
+    # Run alembic upgrade head (using the checked-in script_location path)
+    backend_dir = Path(__file__).resolve().parent
+    alembic_cfg = backend_dir.parent / "alembic.ini"
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "alembic",
+            "--config",
+            str(alembic_cfg),
+            "upgrade",
+            "head",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        logger.error(f"Alembic migration failed: {result.stderr}")
+        raise RuntimeError(f"Alembic upgrade head failed: {result.stderr}")
+    logger.info("Alembic migrations applied.")
+
+    # Initialise the Postgres pool (used by all repository calls)
+    await init_pg_pool()
+    logger.info("Postgres pool initialised.")
+
+    logger.info("Checking seed data…")
     await seed_if_empty()
     logger.info("Startup complete.")
     yield
     logger.info("Shutting down.")
-    if DATABASE_URL:
-        await close_pg_pool()
+    await close_pg_pool()
 
 
 app = FastAPI(title="RAG YouTube Chat API", lifespan=lifespan)
@@ -93,7 +111,7 @@ async def health():
         "status": "ok",
         "video_count": video_count,
         "chunk_count": chunk_count,
-        "db_path": str(DB_PATH),
+        "db_type": "postgres",
     }
 
 

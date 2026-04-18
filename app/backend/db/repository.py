@@ -1,16 +1,21 @@
 """
 Repository layer — all database access goes through this module.
 No raw SQL lives in route handlers.
+
+All tables now live in Postgres via asyncpg. The pool is accessed via
+`get_pg_pool()` from `backend.db.postgres`.
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import uuid
 from datetime import UTC, datetime
 
-import aiosqlite
+import asyncpg
 
-from backend.config import DB_PATH
+from backend.db.postgres import get_pg_pool
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,11 @@ def _new_id() -> str:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+async def _acquire() -> asyncpg.Connection:
+    """Acquire a connection from the pool."""
+    return await get_pg_pool().acquire()
 
 
 # ---------------------------------------------------------------------------
@@ -37,13 +47,14 @@ async def create_video(
 ) -> dict:
     vid_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO videos (id, title, description, url, transcript, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (vid_id, title, description, url, transcript, now),
+    async with await _acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO videos (id, title, description, url, transcript, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            """,
+            vid_id, title, description, url, transcript, now,
         )
-        await db.commit()
     return {
         "id": vid_id,
         "title": title,
@@ -55,37 +66,31 @@ async def create_video(
 
 
 async def get_video(video_id: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)) as cursor:
-            row = await cursor.fetchone()
+    async with await _acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM videos WHERE id = $1",
+            video_id,
+        )
     return dict(row) if row else None
 
 
 async def delete_video(video_id: str) -> None:
     """Delete a video and all its associated chunks (FK cascade handles chunks)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA foreign_keys=ON;")
-        await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
-        await db.commit()
+    async with await _acquire() as conn:
+        await conn.execute("DELETE FROM videos WHERE id = $1", video_id)
 
 
 async def list_videos() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             "SELECT id, title, description, url, created_at FROM videos ORDER BY created_at DESC"
-        ) as cursor:
-            rows = await cursor.fetchall()
+        )
     return [dict(r) for r in rows]
 
 
 async def count_videos() -> int:
-    async with (
-        aiosqlite.connect(DB_PATH) as db,
-        db.execute("SELECT COUNT(*) FROM videos") as cursor,
-    ):
-        row = await cursor.fetchone()
+    async with await _acquire() as conn:
+        row = await conn.fetchrow("SELECT COUNT(*) FROM videos")
     return row[0] if row else 0
 
 
@@ -106,13 +111,14 @@ async def create_chunk(
 ) -> dict:
     chunk_id = _new_id()
     embedding_json = json.dumps(embedding)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (chunk_id, video_id, content, embedding_json, chunk_index, start_seconds, end_seconds, snippet),
+    async with await _acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            chunk_id, video_id, content, embedding_json, chunk_index, start_seconds, end_seconds, snippet,
         )
-        await db.commit()
     return {
         "id": chunk_id,
         "video_id": video_id,
@@ -127,12 +133,10 @@ async def create_chunk(
 
 async def list_chunks() -> list[dict]:
     """Return all chunks with their embeddings (deserialized)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             "SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet FROM chunks"
-        ) as cursor:
-            rows = await cursor.fetchall()
+        )
     result = []
     for r in rows:
         d = dict(r)
@@ -142,14 +146,16 @@ async def list_chunks() -> list[dict]:
 
 
 async def list_chunks_for_video(video_id: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet FROM chunks "
-            "WHERE video_id = ? ORDER BY chunk_index",
-            (video_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet
+            FROM chunks
+            WHERE video_id = $1
+            ORDER BY chunk_index
+            """,
+            video_id,
+        )
     result = []
     for r in rows:
         d = dict(r)
@@ -159,11 +165,8 @@ async def list_chunks_for_video(video_id: str) -> list[dict]:
 
 
 async def count_chunks() -> int:
-    async with (
-        aiosqlite.connect(DB_PATH) as db,
-        db.execute("SELECT COUNT(*) FROM chunks") as cursor,
-    ):
-        row = await cursor.fetchone()
+    async with await _acquire() as conn:
+        row = await conn.fetchrow("SELECT COUNT(*) FROM chunks")
     return row[0] if row else 0
 
 
@@ -174,27 +177,23 @@ async def count_chunks() -> int:
 
 async def list_videos_admin() -> list[dict]:
     """Videos with chunk_count, newest first. Admin library listing."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT v.id, v.title, v.description, v.url, v.created_at,
                    (SELECT COUNT(*) FROM chunks c WHERE c.video_id = v.id) AS chunk_count
             FROM videos v
             ORDER BY v.created_at DESC
             """
-        ) as cursor:
-            rows = await cursor.fetchall()
+        )
     return [dict(r) for r in rows]
 
 
 async def delete_video_cascade(video_id: str) -> bool:
     """Delete a video and its chunks (FK ON DELETE CASCADE). Returns False if not found."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA foreign_keys=ON;")
-        cursor = await db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
-        await db.commit()
-        return cursor.rowcount > 0
+    async with await _acquire() as conn:
+        result = await conn.execute("DELETE FROM videos WHERE id = $1", video_id)
+        return result != "DELETE 0"
 
 
 async def replace_chunks_for_video(
@@ -207,14 +206,15 @@ async def replace_chunks_for_video(
     Caller is responsible for fetching/chunking/embedding BEFORE invoking this
     so a Supadata or OpenRouter failure cannot leave the video chunkless.
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("BEGIN")
-        await db.execute("DELETE FROM chunks WHERE video_id = ?", (video_id,))
-        for c in chunks:
-            await db.execute(
-                "INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
+    async with await _acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM chunks WHERE video_id = $1", video_id)
+            for c in chunks:
+                await conn.execute(
+                    """
+                    INSERT INTO chunks (id, video_id, content, embedding, chunk_index, start_seconds, end_seconds, snippet)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    """,
                     _new_id(),
                     video_id,
                     c["content"],
@@ -223,9 +223,7 @@ async def replace_chunks_for_video(
                     c.get("start_seconds", 0.0),
                     c.get("end_seconds", 0.0),
                     c.get("snippet", ""),
-                ),
-            )
-        await db.commit()
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -236,13 +234,14 @@ async def replace_chunks_for_video(
 async def create_conversation(*, user_id: str, title: str = "New Conversation") -> dict:
     conv_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO conversations (id, user_id, title, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (conv_id, user_id, title, now, now),
+    async with await _acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO conversations (id, user_id, title, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            conv_id, user_id, title, now, now,
         )
-        await db.commit()
     return {
         "id": conv_id,
         "user_id": user_id,
@@ -254,20 +253,17 @@ async def create_conversation(*, user_id: str, title: str = "New Conversation") 
 
 async def get_conversation(conv_id: str, user_id: str) -> dict | None:
     """Return the conversation only if it belongs to the given user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
-            (conv_id, user_id),
-        ) as cursor:
-            row = await cursor.fetchone()
+    async with await _acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM conversations WHERE id = $1 AND user_id = $2",
+            conv_id, user_id,
+        )
     return dict(row) if row else None
 
 
 async def list_conversations(user_id: str) -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT c.*,
                    (SELECT content
@@ -276,46 +272,40 @@ async def list_conversations(user_id: str) -> list[dict]:
                     ORDER BY created_at DESC
                     LIMIT 1) AS preview
             FROM conversations c
-            WHERE c.user_id = ?
+            WHERE c.user_id = $1
             ORDER BY c.updated_at DESC
             """,
-            (user_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            user_id,
+        )
     return [dict(r) for r in rows]
 
 
 async def update_conversation_title(conv_id: str, user_id: str, title: str) -> bool:
     """Rename a conversation. Returns False if it does not belong to the user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
-            (title, _now(), conv_id, user_id),
+    async with await _acquire() as conn:
+        result = await conn.execute(
+            "UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
+            title, _now(), conv_id, user_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        return result != "UPDATE 0"
 
 
 async def touch_conversation(conv_id: str, user_id: str) -> None:
     """Update the updated_at timestamp (scoped to owner; silent no-op otherwise)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
-            (_now(), conv_id, user_id),
+    async with await _acquire() as conn:
+        await conn.execute(
+            "UPDATE conversations SET updated_at = $1 WHERE id = $2 AND user_id = $3",
+            _now(), conv_id, user_id,
         )
-        await db.commit()
 
 
 async def delete_conversation(conv_id: str, user_id: str) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Enable foreign keys so ON DELETE CASCADE removes associated messages
-        await db.execute("PRAGMA foreign_keys=ON;")
-        cursor = await db.execute(
-            "DELETE FROM conversations WHERE id = ? AND user_id = ?",
-            (conv_id, user_id),
+    async with await _acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM conversations WHERE id = $1 AND user_id = $2",
+            conv_id, user_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        return result != "DELETE 0"
 
 
 async def search_conversations_by_title(user_id: str, query: str, limit: int = 20) -> list[dict]:
@@ -351,22 +341,21 @@ async def create_message(
     """Insert a message. Returns None if the conversation does not belong to the user."""
     msg_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
+    async with await _acquire() as conn:
         # Verify ownership atomically — INSERT only succeeds if the conversation
         # row exists for this user. Prevents cross-user message injection even
         # if a route handler forgets to check.
-        cursor = await db.execute(
+        result = await conn.execute(
             """
             INSERT INTO messages (id, conversation_id, role, content, created_at)
-            SELECT ?, ?, ?, ?, ?
+            SELECT $1, $2, $3, $4, $5
             WHERE EXISTS (
-                SELECT 1 FROM conversations WHERE id = ? AND user_id = ?
+                SELECT 1 FROM conversations WHERE id = $6 AND user_id = $7
             )
             """,
-            (msg_id, conversation_id, role, content, now, conversation_id, user_id),
+            msg_id, conversation_id, role, content, now, conversation_id, user_id,
         )
-        await db.commit()
-        if cursor.rowcount == 0:
+        if result == "INSERT 0 0":
             return None
     await touch_conversation(conversation_id, user_id)
     return {
@@ -380,19 +369,17 @@ async def create_message(
 
 async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
     """Return messages only if the conversation belongs to the given user."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT m.*
             FROM messages m
             JOIN conversations c ON c.id = m.conversation_id
-            WHERE m.conversation_id = ? AND c.user_id = ?
+            WHERE m.conversation_id = $1 AND c.user_id = $2
             ORDER BY m.created_at ASC
             """,
-            (conversation_id, user_id),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            conversation_id, user_id,
+        )
     return [dict(r) for r in rows]
 
 
@@ -403,13 +390,14 @@ async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
 
 async def create_sync_run(*, sync_run_id: str, started_at: str) -> dict:
     """Create a new channel sync run record."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO channel_sync_runs (id, status, videos_total, videos_new, videos_error, started_at) "
-            "VALUES (?, 'running', 0, 0, 0, ?)",
-            (sync_run_id, started_at),
+    async with await _acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO channel_sync_runs (id, status, videos_total, videos_new, videos_error, started_at)
+            VALUES ($1, 'running', 0, 0, 0, $2)
+            """,
+            sync_run_id, started_at,
         )
-        await db.commit()
     return {
         "id": sync_run_id,
         "status": "running",
@@ -431,32 +419,29 @@ async def update_sync_run(
     videos_error: int = 0,
 ) -> bool:
     """Update channel sync run counts and optionally mark as finished."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
+    async with await _acquire() as conn:
+        result = await conn.execute(
             """
             UPDATE channel_sync_runs
-            SET status = ?, finished_at = ?, videos_total = ?, videos_new = ?, videos_error = ?
-            WHERE id = ?
+            SET status = $1, finished_at = $2, videos_total = $3, videos_new = $4, videos_error = $5
+            WHERE id = $6
             """,
-            (status, finished_at, videos_total, videos_new, videos_error, sync_run_id),
+            status, finished_at, videos_total, videos_new, videos_error, sync_run_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        return result != "UPDATE 0"
 
 
 async def list_sync_runs(limit: int = 10) -> list[dict]:
     """List recent channel sync runs."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
             """
             SELECT * FROM channel_sync_runs
             ORDER BY started_at DESC
-            LIMIT ?
+            LIMIT $1
             """,
-            (limit,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            limit,
+        )
     return [dict(r) for r in rows]
 
 
@@ -474,13 +459,14 @@ async def create_sync_video(
     """Record a video within a sync run."""
     vid_id = _new_id()
     now = _now()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO channel_sync_videos (id, sync_run_id, youtube_video_id, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (vid_id, sync_run_id, youtube_video_id, status, now),
+    async with await _acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO channel_sync_videos (id, sync_run_id, youtube_video_id, status, created_at)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            vid_id, sync_run_id, youtube_video_id, status, now,
         )
-        await db.commit()
     return {
         "id": vid_id,
         "sync_run_id": sync_run_id,
@@ -495,13 +481,12 @@ async def update_sync_video_status(
     video_id: str, status: str, error_message: str | None = None
 ) -> bool:
     """Update a sync video's status, optionally recording an error."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            "UPDATE channel_sync_videos SET status = ?, error_message = ? WHERE id = ?",
-            (status, error_message, video_id),
+    async with await _acquire() as conn:
+        result = await conn.execute(
+            "UPDATE channel_sync_videos SET status = $1, error_message = $2 WHERE id = $3",
+            status, error_message, video_id,
         )
-        await db.commit()
-        return cursor.rowcount > 0
+        return result != "UPDATE 0"
 
 
 async def get_video_by_youtube_id(youtube_video_id: str) -> dict | None:
@@ -511,22 +496,19 @@ async def get_video_by_youtube_id(youtube_video_id: str) -> dict | None:
     Looks up a video by searching for *youtube_video_id* in the URL column
     (assumes YouTube watch URL format ?v={id}). Returns None if not found.
     """
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM videos WHERE url LIKE ?", (f"%{youtube_video_id}%",)
-        ) as cursor:
-            row = await cursor.fetchone()
+    async with await _acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM videos WHERE url LIKE $1",
+            f"%{youtube_video_id}%",
+        )
     return dict(row) if row else None
 
 
 async def list_sync_videos_for_run(sync_run_id: str) -> list[dict]:
     """List all sync video records for a given sync run."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM channel_sync_videos WHERE sync_run_id = ? ORDER BY created_at",
-            (sync_run_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+    async with await _acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM channel_sync_videos WHERE sync_run_id = $1 ORDER BY created_at",
+            sync_run_id,
+        )
     return [dict(r) for r in rows]

@@ -1,11 +1,9 @@
 """
-Async Postgres connection pool and schema bootstrap.
-
-Used for new tables landing in Postgres (starting with `users`). Existing chat
-tables remain in SQLite for now — see CLAUDE.md "Planned migration: Postgres".
+Async Postgres connection pool.
 
 The pool is a module-level singleton created in the FastAPI lifespan handler;
-routes and repos fetch it via `get_pg_pool()`.
+routes and repos fetch it via `get_pg_pool()`. All schema management is handled
+by Alembic migrations.
 """
 
 from __future__ import annotations
@@ -21,63 +19,6 @@ logger = logging.getLogger(__name__)
 _pool: asyncpg.Pool | None = None
 
 
-USERS_SCHEMA = """
-CREATE EXTENSION IF NOT EXISTS citext;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email CITEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_login_at TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);
-
--- Drop the placeholder counter columns from #51. The sliding-window audit
--- table below supersedes them; see issue #52.
-ALTER TABLE users DROP COLUMN IF EXISTS daily_message_count;
-ALTER TABLE users DROP COLUMN IF EXISTS rate_window_start;
-
--- Sliding-window audit trail for the 25 msg/user/24h cap (MISSION §10 #1).
--- One row per streamed message. Retained for audit; never pruned actively.
-CREATE TABLE IF NOT EXISTS user_messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS user_messages_user_id_created_at_idx
-    ON user_messages (user_id, created_at DESC);
-"""
-
-
-SIGNUP_ATTEMPTS_SCHEMA = """
-CREATE EXTENSION IF NOT EXISTS citext;
-
--- Audit trail for signup rate-limiting (issue #54).
--- Per-IP limit counts only `accepted` rows; the global cap counts everything
--- except `invalid` (which is never written today — Pydantic 400s short-circuit
--- before the handler). Full IPs retained for forensics; future issue may add
--- a pruning job. `email_attempted` is nullable to accommodate malformed bodies.
-CREATE TABLE IF NOT EXISTS signup_attempts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ip INET NOT NULL,
-    email_attempted CITEXT,
-    outcome TEXT NOT NULL CHECK (outcome IN (
-        'accepted','ip_limited','global_limited','duplicate','invalid'
-    )),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS signup_attempts_ip_created_at_idx
-    ON signup_attempts (ip, created_at DESC);
-CREATE INDEX IF NOT EXISTS signup_attempts_created_at_idx
-    ON signup_attempts (created_at DESC);
-"""
-
-
 async def init_pg_pool() -> asyncpg.Pool:
     """Create the asyncpg pool if not already created. Idempotent."""
     global _pool
@@ -85,8 +26,7 @@ async def init_pg_pool() -> asyncpg.Pool:
         return _pool
     if not DATABASE_URL:
         raise RuntimeError(
-            "DATABASE_URL is not set; cannot initialise Postgres pool. "
-            "Auth-required features are disabled in this environment."
+            "DATABASE_URL is not set; cannot initialise Postgres pool."
         )
     logger.info("Connecting to Postgres…")
     _pool = await asyncpg.create_pool(
@@ -114,19 +54,3 @@ def get_pg_pool() -> asyncpg.Pool:
             "FastAPI lifespan before using any Postgres-backed repository."
         )
     return _pool
-
-
-async def init_users_schema() -> None:
-    """Run the users-table migration. Idempotent via CREATE ... IF NOT EXISTS."""
-    pool = await init_pg_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(USERS_SCHEMA)
-    logger.info("Users schema ready.")
-
-
-async def init_signup_attempts_schema() -> None:
-    """Run the signup_attempts migration. Idempotent."""
-    pool = await init_pg_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(SIGNUP_ATTEMPTS_SCHEMA)
-    logger.info("Signup-attempts schema ready.")

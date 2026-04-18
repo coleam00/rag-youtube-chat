@@ -69,15 +69,15 @@ OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
 CHAT_MODEL: str = "anthropic/claude-sonnet-4.6"
 
-# Database — env-overridable so containerized deploys can point at a mounted volume.
-# Default preserves the existing local dev behaviour (app/backend/data/chat.db).
-_default_db_path = Path(__file__).resolve().parent / "data" / "chat.db"
-DB_PATH: Path = Path(os.environ.get("DB_PATH", str(_default_db_path)))
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-# Postgres — required in prod for auth/users. Absent locally means auth endpoints
-# will fail on first DB call; pick one of the existing chat routes for local dev.
+# Postgres — required for all data (chat + auth). The app fails fast without it.
+# In prod, docker-compose injects DATABASE_URL from the POSTGRES_* vars.
+# Locally, set it manually (e.g. in .env at the app/ root).
 DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. DynaChat now requires Postgres for all data "
+        "(no SQLite fallback). Set DATABASE_URL in your environment before starting."
+    )
 
 # JWT signing secret. Required whenever auth is active. 32+ random bytes in prod.
 # A local dev value is used only when JWT_SECRET is unset AND DATABASE_URL is unset
