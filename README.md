@@ -106,10 +106,11 @@ What the factory is actually building.
                                             │    │     (Docling)      │
                                             │    │        │           │
                                             │    DB    Embeddings     │
-                                            │  (SQLite) (OpenRouter)  │
+                                            │(Postgres) (OpenRouter)  │
                                             │            │            │
                                             │         Retriever       │
-                                            │       (NumPy cosine)    │
+                                            │  (RRF hybrid: tsvector   │
+                                            │   + pgvector cosine)     │
                                             │            │            │
                                             │           LLM           │
                                             │    (Claude via          │
@@ -119,11 +120,11 @@ What the factory is actually building.
 
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS (Bun)
 - **Backend:** Python FastAPI, single process handling API + RAG + LLM
-- **Database:** SQLite via aiosqlite (Postgres-swappable via repository pattern)
+- **Database:** Postgres via asyncpg (with pgvector for hybrid retrieval)
 - **LLM:** Claude Sonnet via OpenRouter with SSE streaming
 - **Embeddings:** `text-embedding-3-small` via OpenRouter
 - **Chunking:** Docling HybridChunker
-- **Retrieval:** NumPy cosine similarity, top-5 chunks
+- **Retrieval:** Reciprocal Rank Fusion (RRF) combining Postgres tsvector full-text search with pgvector cosine similarity, top-5 chunks
 
 ### How it works
 

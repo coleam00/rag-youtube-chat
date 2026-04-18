@@ -20,7 +20,7 @@ pytestmark = pytest.mark.skip(
     reason="Tests require SQLite schema.init_db; pending rewrite for asyncpg/Alembic."
 )
 
-from backend.db.repository import (  # noqa: E402,F401
+from backend.db.repository import (  # noqa: E402
     create_conversation,
     search_conversations_by_title,
 )

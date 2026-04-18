@@ -30,9 +30,9 @@ import pytest
 os.environ.setdefault("JWT_SECRET", "test-secret-please-do-not-use-in-prod")
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
 
-from httpx import ASGITransport, AsyncClient  # noqa: E402
+from httpx import ASGITransport, AsyncClient
 
-from backend import rate_limit  # noqa: E402
+from backend import rate_limit
 
 # `message_store` and the `patch_rate_limit` autouse stub live in conftest.py
 # so every test in this suite (including /me auth tests) gets the same

@@ -23,6 +23,7 @@ os.environ["CHANNEL_SYNC_TYPE"] = "video"
 import pytest
 
 import backend.rag.retriever as retriever_module
+import backend.rag.retriever_hybrid as retriever_hybrid_module
 from backend import rate_limit, signup_rate_limit
 
 
@@ -32,6 +33,14 @@ def reset_retriever_cache():
     retriever_module._cache = None
     yield
     retriever_module._cache = None
+
+
+@pytest.fixture(autouse=True)
+def reset_retriever_hybrid_cache():
+    """Ensure the module-level hybrid video cache is clean before and after every test."""
+    retriever_hybrid_module._video_cache.clear()
+    yield
+    retriever_hybrid_module._video_cache.clear()
 
 
 @pytest.fixture

@@ -16,9 +16,12 @@ pytestmark = pytest.mark.skip(
     reason="Tests require SQLite schema.init_db; pending rewrite for asyncpg/Alembic."
 )
 
-import aiosqlite  # noqa: E402,F401
+try:
+    import aiosqlite
+except ImportError:
+    aiosqlite = None  # type: ignore[assignment]
 
-from backend.db import repository  # noqa: E402,F401
+from backend.db import repository  # noqa: E402
 
 
 class TestCreateChunkWithTimestamps:

@@ -66,44 +66,30 @@ async def get_channel_video_ids(
         SupadataError: On API errors after retries
     """
     client = _get_client()
-    max_retries = 3
-    base_delay = 2.0
 
-    for attempt in range(max_retries):
+    for attempt in range(3):
         try:
-            result = client.youtube.channel.videos(
-                id=channel_id,
-                type=type,
-                limit=limit,
-            )
+            result = client.youtube.channel.videos(id=channel_id, type=type, limit=limit)
             return ChannelVideos(
                 video_ids=list(result.video_ids or []),
                 short_ids=list(result.short_ids or []),
                 live_ids=list(result.live_ids or []),
             )
         except SupadataError as exc:
-            if exc.status == 429 and attempt < max_retries - 1:
-                delay = base_delay * (2**attempt)
+            if exc.status == 429 and attempt < 2:
+                delay = 2.0 * (2**attempt)
                 logger.warning(
-                    "Supadata rate limit (429), retrying in %ds (attempt %d)",
-                    delay,
-                    attempt + 1,
+                    "Supadata rate limit (429), retrying in %ds (attempt %d)", delay, attempt + 1
                 )
                 await asyncio.sleep(delay)
                 continue
-            logger.error(
-                "Supadata channel.videos failed after %d attempts: %s",
-                max_retries,
-                exc,
-            )
+            logger.error("Supadata channel.videos failed after %d attempts: %s", 3, exc)
             raise
         except (TimeoutError, OSError) as exc:
             logger.error("Network error in get_channel_video_ids: %s", exc)
             raise SupadataError(error="network_error", message=str(exc), details="") from exc
-        # Let other exceptions (TypeError, AttributeError, CancelledError) propagate
 
-    # All attempts returned or raised; keep mypy happy with an explicit fallback.
-    raise RuntimeError("get_channel_video_ids: retries exhausted without return")
+    raise RuntimeError("unreachable")
 
 
 async def get_transcript(video_id: str, lang: str = "en") -> str | None:
@@ -121,10 +107,8 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
         SupadataError: On API errors after retries
     """
     client = _get_client()
-    max_retries = 3
-    base_delay = 2.0
 
-    for attempt in range(max_retries):
+    for attempt in range(3):
         try:
             result = client.youtube.transcript(video_id=video_id, lang=lang)
             if not result:
@@ -145,8 +129,8 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
                 return joined if joined else None
             return None
         except SupadataError as exc:
-            if exc.status == 429 and attempt < max_retries - 1:
-                delay = base_delay * (2**attempt)
+            if exc.status == 429 and attempt < 2:
+                delay = 2.0 * (2**attempt)
                 logger.warning("Supadata transcript rate limit (429), retrying in %ds", delay)
                 await asyncio.sleep(delay)
                 continue
@@ -158,6 +142,5 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
         except (TimeoutError, OSError) as exc:
             logger.error("Network error in get_transcript for %s: %s", video_id, exc)
             raise SupadataError(error="network_error", message=str(exc), details="") from exc
-        # Let other exceptions (TypeError, AttributeError, CancelledError) propagate
 
-    return None  # Satisfy mypy — unreachable after loop exhausts
+    return None

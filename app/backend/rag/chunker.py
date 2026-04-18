@@ -260,26 +260,19 @@ def _enforce_max_chars(chunks: list[str], max_chars: int) -> list[str]:
 
 def _split_text(text: str, max_chars: int) -> list[str]:
     """
-    Recursively split *text* into pieces each ≤ max_chars.
-    Tries double-newline splits first, then sentence splits.
+    Split *text* into pieces each ≤ max_chars.
+    Tries separators in order: double-newline, single-newline, sentence, then hard-cut.
     """
     if len(text) <= max_chars:
         return [text] if text.strip() else []
 
-    # Try splitting on double newline (paragraph boundary)
-    parts = text.split("\n\n")
-    if len(parts) > 1:
-        return _group_parts(parts, max_chars, sep="\n\n")
-
-    # Try splitting on single newline
-    parts = text.split("\n")
-    if len(parts) > 1:
-        return _group_parts(parts, max_chars, sep="\n")
-
-    # Try splitting on ". " (sentence boundary)
-    parts = text.split(". ")
-    if len(parts) > 1:
-        return _group_parts(parts, max_chars, sep=". ")
+    # Try each separator in priority order
+    for sep in ("\n\n", "\n", ". "):
+        parts = text.split(sep)
+        if len(parts) > 1:
+            grouped = _group_parts(parts, max_chars, sep)
+            if len(grouped) > 1 or (len(grouped) == 1 and len(grouped[0]) <= max_chars):
+                return grouped
 
     # Last resort: hard-cut at max_chars
     pieces: list[str] = []
