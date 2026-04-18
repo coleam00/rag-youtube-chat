@@ -92,9 +92,11 @@ class TestKeywordSearchAcquirePattern:
             # MagicMock auto-creates attributes, so __await__ exists but is a new MagicMock
             # If await was called, it would have been invoked (called). Since we never await,
             # the mock's __await__ was never invoked.
-            await_mock = getattr(mock_acquire, '__await__', None)
+            await_mock = getattr(mock_acquire, "__await__", None)
             if await_mock is not None:
-                assert not await_mock.called, "await _acquire() was called — this is the bug this test prevents"
+                assert not await_mock.called, (
+                    "await _acquire() was called — this is the bug this test prevents"
+                )
 
             assert isinstance(result, list)
 
@@ -124,8 +126,10 @@ class TestVectorSearchPgAcquirePattern:
 
             repository._acquire.assert_called_once()
             mock_acquire.__aenter__.assert_called_once()
-            await_mock = getattr(mock_acquire, '__await__', None)
+            await_mock = getattr(mock_acquire, "__await__", None)
             if await_mock is not None:
-                assert not await_mock.called, "await _acquire() was called — this is the bug this test prevents"
+                assert not await_mock.called, (
+                    "await _acquire() was called — this is the bug this test prevents"
+                )
 
             assert isinstance(result, list)
