@@ -127,8 +127,22 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
     for attempt in range(max_retries):
         try:
             result = client.youtube.transcript(video_id=video_id, lang=lang)
-            if result and result.text:
-                return str(result.text)
+            if not result:
+                return None
+            # Supadata SDK ≥1.x returns a `content` field instead of `text`.
+            # `content` is either a plain string (when the caller asked for
+            # text mode) or a list of TranscriptChunk(text, offset, duration,
+            # lang) segments. Normalize to a single string.
+            content = getattr(result, "content", None)
+            if content is None:
+                return None
+            if isinstance(content, str):
+                return content if content else None
+            if isinstance(content, list):
+                joined = " ".join(
+                    getattr(chunk, "text", "") for chunk in content
+                ).strip()
+                return joined if joined else None
             return None
         except SupadataError as exc:
             if exc.status == 429 and attempt < max_retries - 1:
