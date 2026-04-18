@@ -136,9 +136,7 @@ async def test_sync_channel_idempotent_skips_existing_videos():
         mock_client.youtube.channel.videos = make_mock_channel_videos(
             ["dQw4w9WgXcQ", "abc123def456"]
         )
-        mock_client.transcript = make_mock_transcript(
-            "This is a sample transcript for the video."
-        )
+        mock_client.transcript = make_mock_transcript("This is a sample transcript for the video.")
         mock_get_client.return_value = mock_client
 
         # Patch where names are bound in channels.py (import = local name)
@@ -164,9 +162,7 @@ async def test_sync_channel_returns_sync_run_id():
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["dQw4w9WgXcQ"])
-        mock_client.transcript = make_mock_transcript(
-            "This is a sample transcript for the video."
-        )
+        mock_client.transcript = make_mock_transcript("This is a sample transcript for the video.")
         mock_get_client.return_value = mock_client
 
         with (
@@ -241,9 +237,7 @@ async def test_sync_channel_429_triggers_backoff():
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = mock_channel_videos_with_retry
-        mock_client.transcript = make_mock_transcript(
-            "This is a sample transcript for the video."
-        )
+        mock_client.transcript = make_mock_transcript("This is a sample transcript for the video.")
         mock_get_client.return_value = mock_client
 
         with (
