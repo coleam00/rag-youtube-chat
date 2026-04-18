@@ -89,7 +89,7 @@ async def get_channel_video_ids(
             logger.error("Network error in get_channel_video_ids: %s", exc)
             raise SupadataError(error="network_error", message=str(exc), details="") from exc
 
-    raise RuntimeError("unreachable")
+    raise RuntimeError("unreachable")  # mypy needs this for return-type inference
 
 
 async def get_transcript(video_id: str, lang: str = "en") -> str | None:
