@@ -210,7 +210,7 @@ Escalation means: apply the `factory:needs-human` label, post a comment summariz
 ### Hard limits
 
 - **Triage batch size: 10 issues per run.** Larger backlogs take multiple orchestrator cycles.
-- **One workflow at a time.** The orchestrator checks `bun run cli workflow status` before dispatching and exits if anything is running. This is enforced operationally by the cron + status check, not by a separate scheduler.
+- **Up to `MAX_PARALLEL` workflows at a time (default 4, configurable via `.env`).** The orchestrator dispatches multiple workflows per cycle with two safeguards: (1) a per-target lock - it parses running `bun run cli workflow run` processes and will not dispatch a workflow whose `(workflow-name, target#N)` pair matches one already in flight, preventing two workflows from racing on the same PR or issue; (2) triage serializes with itself (only one triage run at a time, ever). This replaces the earlier "one workflow at a time" gate.
 - **Fix attempts per PR: maximum 2.** The third cycle escalates.
 - **PR size: 500 lines.** See section 2.
 - **Flood protection.** Non-owner GitHub accounts are capped at 3 issues per UTC calendar day. Excess issues get labeled `factory:rate-limited` and skipped until the next UTC day, when the triage workflow removes the label and re-evaluates them. The repository owner (`coleam00`) is exempt. See section 3.

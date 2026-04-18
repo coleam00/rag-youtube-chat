@@ -47,6 +47,14 @@ if not OPENROUTER_API_KEY:
         file=sys.stderr,
     )
 
+SUPADATA_API_KEY: str = os.environ.get("SUPADATA_API_KEY", "")
+if not SUPADATA_API_KEY:
+    print(
+        "WARNING: SUPADATA_API_KEY is not set or empty. "
+        "Ingest-by-URL will not work in production.",
+        file=sys.stderr,
+    )
+
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
 CHAT_MODEL: str = "anthropic/claude-sonnet-4.6"
@@ -77,9 +85,6 @@ JWT_EXPIRY_SECONDS: int = 7 * 24 * 60 * 60  # 7 days
 # RAG settings
 RETRIEVAL_TOP_K: int = 5
 HYBRID_CHUNKER_MAX_TOKENS: int = 512
-
-# Supadata — required for channel sync (YouTube transcript ingestion)
-SUPADATA_API_KEY: str = os.environ.get("SUPADATA_API_KEY", "")
 
 # YouTube channel to sync from (used by POST /api/channels/sync)
 YOUTUBE_CHANNEL_ID: str = os.environ.get("YOUTUBE_CHANNEL_ID", "")
