@@ -268,7 +268,11 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   }, []);
 
   useEffect(() => {
-    if (autoScrollRef.current) scrollToBottom();
+    if (autoScrollRef.current) {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    }
   }, [messages.length, streamingContent, scrollToBottom]);
 
   useEffect(() => {
