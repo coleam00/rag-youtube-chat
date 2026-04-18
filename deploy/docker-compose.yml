@@ -51,18 +51,15 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       SUPADATA_API_KEY: ${SUPADATA_API_KEY:-}
-      DB_PATH: /app/data/chat.db
       FRONTEND_DIST: /app/frontend/dist
-      # Postgres for auth / users (issue #51). DATABASE_URL must reach the
-      # in-compose postgres service; JWT_SECRET signs session cookies.
+      # DATABASE_URL is now the sole database connection (no SQLite).
+      # Points at the in-compose postgres service by DNS name.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USER_EMAIL: ${ADMIN_USER_EMAIL:-}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - app_data:/app/data
     healthcheck:
       test:
         - "CMD"
@@ -84,18 +81,15 @@ services:
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       SUPADATA_API_KEY: ${SUPADATA_API_KEY:-}
-      DB_PATH: /app/data/chat.db
       FRONTEND_DIST: /app/frontend/dist
-      # Postgres for auth / users (issue #51). DATABASE_URL must reach the
-      # in-compose postgres service; JWT_SECRET signs session cookies.
+      # DATABASE_URL is now the sole database connection (no SQLite).
+      # Points at the in-compose postgres service by DNS name.
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USER_EMAIL: ${ADMIN_USER_EMAIL:-}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - app_data:/app/data
     healthcheck:
       test:
         - "CMD"

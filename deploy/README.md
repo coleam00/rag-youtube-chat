@@ -53,3 +53,47 @@ ADMIN_USER_EMAIL=admin@yourdomain.com
 ## Secret hygiene
 
 The real `.env` lives ONLY on the deploy host, in a directory owned by a non-factory user with mode 600. It is never committed, never shared via chat, and never readable by the Dark Factory workflow user.
+
+## SQLite → Postgres cutover runbook
+
+When migrating an existing production deployment from SQLite to Postgres:
+
+### Prerequisites
+- Postgres must be running and healthy (`postgres` service up)
+- `DATABASE_URL` must be set correctly in `.env`
+- `alembic.ini` must be present in the app container
+
+### Step 1 — Snapshot SQLite (before cutover)
+```bash
+# On the host, inside the app container or at app/backend/data/
+./scripts/dump_sqlite.sh
+# Or manually:
+cp /app/data/chat.db /app/data/chat.db.$(date +%s).bak
+```
+
+### Step 2 — Run Alembic migrations (first deploy with new build)
+The app runs `alembic upgrade head` automatically on startup.
+Verify it succeeded:
+```bash
+docker compose exec app-blue alembic --config /app/backend/alembic.ini current
+# Should show: 0001 (or latest revision)
+```
+
+### Step 3 — Copy data from SQLite to Postgres (one-time)
+```bash
+# Run the migration script inside the app container
+docker compose exec app-blue python -m backend.scripts.migrate_sqlite_to_pg /app/data/chat.db
+# The script will prompt for DATABASE_URL (use the same one from .env)
+```
+
+### Step 4 — Verify
+```bash
+# Check row counts match between snapshot and Postgres
+docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c 'SELECT count(*) from videos'
+docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c 'SELECT count(*) from chunks'
+```
+
+### Step 5 — Restart app (ensures clean pool state)
+```bash
+docker compose restart app-blue app-green
+```

@@ -18,7 +18,8 @@ This file covers **how the code is written**. For *what* to build, see `MISSION.
 - Python 3.11+ (not specified in any lockfile; don't rely on 3.12+ features)
 - `uv` for package management (not pip, not poetry) — `backend/pyproject.toml` is the dependency source of truth, `backend/uv.lock` pins exact versions
 - FastAPI with `uvicorn[standard]` ASGI server
-- `aiosqlite` for async SQLite access (no ORM — raw SQL through `db/repository.py`)
+- `asyncpg` for async Postgres access (via connection pool from `db/postgres.py`)
+- `alembic` for schema migrations (one Alembic migration layer for all tables)
 - `docling-core[chunking]` for transcript chunking (HybridChunker)
 - `openai` SDK pointed at OpenRouter's OpenAI-compatible endpoint (for both embeddings and chat completions)
 - `numpy` for in-process cosine similarity
@@ -213,7 +214,7 @@ bun run test
 
 ### Python (backend)
 
-- **Async everywhere.** FastAPI routes are `async def`. Database calls use `aiosqlite`. Any sync blocking call (file I/O, CPU work) in a route handler is a bug — use `asyncio.to_thread` or move it to a background task.
+- **Async everywhere.** FastAPI routes are `async def`. Database calls use `asyncpg` via a connection pool. Any sync blocking call (file I/O, CPU work) in a route handler is a bug — use `asyncio.to_thread` or move it to a background task.
 - **Imports:** stdlib first, third-party second, local third. Group with blank lines. No wildcard imports.
 - **Type hints:** use them on every function signature and return type. Use `list[str]` / `dict[str, int]` syntax (Python 3.9+), not `List` / `Dict` from `typing`.
 - **No `print()` in runtime code.** Use `logging` with a module-level logger: `logger = logging.getLogger(__name__)`. `print()` is acceptable in `data/seed.py` and one-off scripts.
@@ -238,24 +239,18 @@ bun run test
 
 ## Database
 
-**Current state:** SQLite via `aiosqlite`. Database file at `app/backend/data/chat.db`, auto-created on first startup via `backend.db.schema.init_db()` called from the FastAPI lifespan handler. No ORM. No Alembic migrations. Schema is `CREATE TABLE IF NOT EXISTS` against literal SQL in `schema.py`.
+**Current state:** Postgres via `asyncpg`. All tables (chat + auth) live in Postgres. Schema is managed by Alembic migrations. Connection pool initialised in the FastAPI lifespan handler via `db/postgres.py:get_pg_pool()`. No ORM. No SQLite.
 
-**Tables:** `videos`, `chunks` (FK → videos), `conversations`, `messages` (FK → conversations), `channel_sync_runs`, `channel_sync_videos` (FK → channel_sync_runs). `PRAGMA foreign_keys=ON` and `PRAGMA journal_mode=WAL` set at connection time.
+**Tables:** `users`, `user_messages`, `signup_attempts`, `videos`, `chunks` (FK → videos), `conversations`, `messages` (FK → conversations), `channel_sync_runs`, `channel_sync_videos` (FK → channel_sync_runs). All use `TIMESTAMPTZ` for timestamps. TEXT primary keys for chat tables (compatible with client-side IDs).
 
-### Planned migration: Postgres
+**Alembic workflow:** All schema changes go through Alembic migrations. The initial migration (`0001_initial.py`) creates all tables. On startup, the app runs `alembic upgrade head` automatically in the lifespan handler.
 
-**Production target already provisioned.** The factory VPS runs `pgvector/pgvector:pg16` (pgvector 0.8.2) via docker-compose, bound to `127.0.0.1:5433`, database `dynachat`, user `dynachat`. The password and full `DATABASE_URL` live in `/opt/dynachat/.env` on the prod host (root-owned, mode 600). The factory does **not** read that file — it only references `os.environ.get("DATABASE_URL")` from `config.py`, and docker-compose injects it at container start.
-
-The factory is **allowed** to work on the Postgres migration when an issue is filed for it (this is one of the few architectural changes explicitly permitted by MISSION.md). Until then, write all new code in a Postgres-portable way so the eventual migration is a drop-in swap, not a rewrite.
-
-**Rules for new database code today:**
-
-1. **Only use SQL that is portable across SQLite and Postgres.** No `json_extract()`, no `strftime()`, no SQLite-specific pragmas baked into queries. Stick to ANSI SQL.
-2. **Never rely on SQLite's permissive typing.** Put explicit `NOT NULL`, `CHECK`, and type constraints on every new column.
-3. **Use ISO 8601 strings for timestamps**, not SQLite's `DATETIME`. Both databases round-trip ISO strings cleanly; `DATETIME` does not.
-4. **Primary keys are text UUIDs** (already the convention — keep it that way). Do not add auto-increment integer PKs; they'll complicate the Postgres migration.
-5. **When the migration happens**, `aiosqlite` will be swapped for `asyncpg` or `psycopg[binary]`. Keep all SQL in `db/repository.py` so the swap is confined to one file.
-6. **Do not introduce Alembic yet.** When the migration starts, the first PR of that effort introduces Alembic, generates an initial migration from the existing schema, and vendors it. Until then, `schema.py`'s `CREATE TABLE IF NOT EXISTS` remains authoritative.
+**Rules for database code:**
+1. All SQL lives in `db/repository.py` — parameterised, no f-string interpolation.
+2. Use `$1, $2, $3...` placeholders for asyncpg (not `?` as in aiosqlite).
+3. All timestamps stored as TIMESTAMPTZ via ISO 8601 strings parsed by Postgres.
+4. TEXT primary keys for chat tables (text UUIDs generated via `_new_id()`).
+5. UUID primary keys for auth tables (`gen_random_uuid()` in Postgres).
 
 ---
 
@@ -282,7 +277,7 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 | `SUPADATA_API_KEY` | prod (YouTube ingestion) | Fetches YouTube transcripts via Supadata. Required for channel sync and manual ingestion |
 | `YOUTUBE_CHANNEL_ID` | prod (channel sync) | YouTube channel ID/handle to sync videos from via `POST /api/channels/sync` |
 | `CHANNEL_SYNC_TYPE` | prod (channel sync) | Content type filter for channel sync: `all`, `video`, `short`, `live`. Default: `video` |
-| `DATABASE_URL` | prod (post-migration) | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. Absent locally = fall back to SQLite |
+| `DATABASE_URL` | **yes** (prod + dev) | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. The app refuses to start if this is unset (no SQLite fallback). |
 
 Everything else is currently hardcoded in `config.py` (model names, ports, chunk size, top-k). When adding configurability, add the constant to `config.py` with a sensible default:
 

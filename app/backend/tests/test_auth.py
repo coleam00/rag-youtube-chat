@@ -86,13 +86,12 @@ def fake_users_repo(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def stub_pg_lifecycle(monkeypatch):
-    """The FastAPI lifespan calls init_users_schema + close_pg_pool — no-op both."""
+    """The FastAPI lifespan closes the pg pool on shutdown — no-op it."""
     from backend.db import postgres as pg
 
     async def noop():
         return None
 
-    monkeypatch.setattr(pg, "init_users_schema", noop)
     monkeypatch.setattr(pg, "close_pg_pool", noop)
 
 

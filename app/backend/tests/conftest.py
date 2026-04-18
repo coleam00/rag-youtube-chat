@@ -94,6 +94,15 @@ class _FakeConn:
     async def execute(self, *args, **kwargs):
         return None
 
+    async def fetchrow(self, *args, **kwargs):
+        return None
+
+    async def fetch(self, *args, **kwargs):
+        return []
+
+    async def fetchval(self, *args, **kwargs):
+        return 0
+
     def transaction(self):
         return self
 
@@ -104,26 +113,47 @@ class _FakeConn:
         return False
 
 
-class _FakePool:
-    def acquire(self):
-        return self
+class _FakeAcquire:
+    """Dual-purpose awaitable + async context manager — matches asyncpg.pool.PoolAcquireContext."""
 
-    async def __aenter__(self):
+    def __await__(self):
+        async def _do() -> _FakeConn:
+            return _FakeConn()
+
+        return _do().__await__()
+
+    async def __aenter__(self) -> _FakeConn:
         return _FakeConn()
 
     async def __aexit__(self, *exc):
         return False
 
 
+class _FakePool:
+    def acquire(self):
+        return _FakeAcquire()
+
+
 @pytest.fixture(autouse=True)
 def patch_pg_pool(monkeypatch):
-    """Return a no-op pool so `pool.acquire()`/`conn.transaction()` succeed in tests."""
+    """Return a no-op pool so `pool.acquire()`/`conn.transaction()` succeed in tests.
+
+    `get_pg_pool` is imported by name into several modules, so we patch every
+    binding — not just the source in `backend.db.postgres`.
+    """
+    from backend import rate_limit as rate_limit_mod
     from backend.db import postgres as pg
+    from backend.db import repository as repo_mod
+    from backend.db import users_repo as users_repo_mod
     from backend.routes import auth as auth_route
 
     fake = _FakePool()
-    monkeypatch.setattr(pg, "get_pg_pool", lambda: fake)
-    monkeypatch.setattr(auth_route, "get_pg_pool", lambda: fake)
+    getter = lambda: fake  # noqa: E731
+    monkeypatch.setattr(pg, "get_pg_pool", getter)
+    monkeypatch.setattr(auth_route, "get_pg_pool", getter)
+    monkeypatch.setattr(repo_mod, "get_pg_pool", getter)
+    monkeypatch.setattr(users_repo_mod, "get_pg_pool", getter)
+    monkeypatch.setattr(rate_limit_mod, "get_pg_pool", getter)
 
 
 @pytest.fixture(autouse=True)

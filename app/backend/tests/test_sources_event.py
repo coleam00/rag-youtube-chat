@@ -9,7 +9,6 @@ The SSE event emission itself is tested via integration tests in test_ingest_cac
 which validate the full streaming stack against mocked dependencies.
 """
 
-
 from backend.routes.messages import _format_context
 
 
@@ -253,9 +252,33 @@ class TestSseSourcesEventEmission:
         import json
 
         chunks = [
-            {"chunk_id": "c1", "video_id": "v1", "video_title": "Video 1", "video_url": "https://youtube.com/watch?v=abc", "start_seconds": 0.0, "end_seconds": 10.0, "snippet": "Snippet 1"},
-            {"chunk_id": "c2", "video_id": "v2", "video_title": "Video 2", "video_url": "https://youtube.com/watch?v=def", "start_seconds": 5.0, "end_seconds": 15.0, "snippet": "Snippet 2"},
-            {"chunk_id": "c3", "video_id": "v1", "video_title": "Video 1", "video_url": "https://youtube.com/watch?v=abc", "start_seconds": 20.0, "end_seconds": 30.0, "snippet": "Snippet 3"},
+            {
+                "chunk_id": "c1",
+                "video_id": "v1",
+                "video_title": "Video 1",
+                "video_url": "https://youtube.com/watch?v=abc",
+                "start_seconds": 0.0,
+                "end_seconds": 10.0,
+                "snippet": "Snippet 1",
+            },
+            {
+                "chunk_id": "c2",
+                "video_id": "v2",
+                "video_title": "Video 2",
+                "video_url": "https://youtube.com/watch?v=def",
+                "start_seconds": 5.0,
+                "end_seconds": 15.0,
+                "snippet": "Snippet 2",
+            },
+            {
+                "chunk_id": "c3",
+                "video_id": "v1",
+                "video_title": "Video 1",
+                "video_url": "https://youtube.com/watch?v=abc",
+                "start_seconds": 20.0,
+                "end_seconds": 30.0,
+                "snippet": "Snippet 3",
+            },
         ]
 
         source_citations = [
@@ -278,4 +301,3 @@ class TestSseSourcesEventEmission:
         assert parsed[0]["chunk_id"] == "c1"
         assert parsed[1]["chunk_id"] == "c2"
         assert parsed[2]["chunk_id"] == "c3"
-
