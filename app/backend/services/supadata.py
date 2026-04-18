@@ -110,7 +110,7 @@ async def get_transcript(video_id: str, lang: str = "en") -> str | None:
 
     for attempt in range(3):
         try:
-            result = client.youtube.transcript(video_id=video_id, lang=lang)
+            result = client.transcript(url=f"https://youtube.com/watch?v={video_id}", lang=lang)
             if not result:
                 return None
             # Supadata SDK ≥1.x returns a `content` field instead of `text`.

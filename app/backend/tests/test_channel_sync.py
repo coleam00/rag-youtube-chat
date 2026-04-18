@@ -78,17 +78,17 @@ class MockChannelVideosResult:
 
 
 class MockTranscriptResult:
-    """Plain sync object returned by client.youtube.transcript()."""
+    """Plain sync object returned by client.transcript()."""
 
     def __init__(self, text="This is a sample transcript for the video."):
-        self.text = text
+        self.content = text
 
 
 class NoTranscriptResult:
     """Plain sync object returned when no transcript is available."""
 
     def __init__(self):
-        self.text = None
+        self.content = None
 
 
 def make_mock_channel_videos(video_ids, short_ids=None, live_ids=None):
@@ -136,7 +136,7 @@ async def test_sync_channel_idempotent_skips_existing_videos():
         mock_client.youtube.channel.videos = make_mock_channel_videos(
             ["dQw4w9WgXcQ", "abc123def456"]
         )
-        mock_client.youtube.transcript = make_mock_transcript(
+        mock_client.transcript = make_mock_transcript(
             "This is a sample transcript for the video."
         )
         mock_get_client.return_value = mock_client
@@ -164,7 +164,7 @@ async def test_sync_channel_returns_sync_run_id():
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["dQw4w9WgXcQ"])
-        mock_client.youtube.transcript = make_mock_transcript(
+        mock_client.transcript = make_mock_transcript(
             "This is a sample transcript for the video."
         )
         mock_get_client.return_value = mock_client
@@ -209,7 +209,7 @@ async def test_sync_channel_no_transcript_creates_error_row():
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["noTranscriptVideo"])
-        mock_client.youtube.transcript = no_transcript_fn
+        mock_client.transcript = no_transcript_fn
         mock_get_client.return_value = mock_client
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -241,7 +241,7 @@ async def test_sync_channel_429_triggers_backoff():
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = mock_channel_videos_with_retry
-        mock_client.youtube.transcript = make_mock_transcript(
+        mock_client.transcript = make_mock_transcript(
             "This is a sample transcript for the video."
         )
         mock_get_client.return_value = mock_client
@@ -341,7 +341,7 @@ async def test_sync_channel_embedding_failure_updates_sync_video_status(
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["dQw4w9WgXcQ"])
-        mock_client.youtube.transcript = make_mock_transcript("Sample transcript.")
+        mock_client.transcript = make_mock_transcript("Sample transcript.")
         mock_get_client.return_value = mock_client
 
         with (
@@ -371,7 +371,7 @@ async def test_sync_channel_empty_chunks_videos_error_not_new(temp_db_schema, by
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["dQw4w9WgXcQ"])
-        mock_client.youtube.transcript = make_mock_transcript("Sample transcript.")
+        mock_client.transcript = make_mock_transcript("Sample transcript.")
         mock_get_client.return_value = mock_client
 
         with patch("backend.routes.channels.chunk_video", return_value=[]):
@@ -407,7 +407,7 @@ async def test_sync_channel_all_videos_error_status_failed(temp_db_schema, bypas
         mock_client.youtube.channel.videos = make_mock_channel_videos(
             ["video1", "video2", "video3"]
         )
-        mock_client.youtube.transcript = always_fail_transcript
+        mock_client.transcript = always_fail_transcript
         mock_get_client.return_value = mock_client
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -426,7 +426,7 @@ async def test_sync_channel_invalidate_cache_called(temp_db_schema, bypass_auth)
     with patch("backend.services.supadata._get_client") as mock_get_client:
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["dQw4w9WgXcQ"])
-        mock_client.youtube.transcript = make_mock_transcript("Sample transcript.")
+        mock_client.transcript = make_mock_transcript("Sample transcript.")
         mock_get_client.return_value = mock_client
 
         with (
