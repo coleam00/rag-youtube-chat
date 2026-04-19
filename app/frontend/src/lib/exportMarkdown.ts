@@ -11,31 +11,37 @@
 import { saveAs } from 'file-saver';
 import type { Citation, Conversation, Message } from './api';
 
-function formatTimestamp(seconds: number): string {
+export function formatTimestamp(seconds: number): string {
   const s = Math.floor(seconds);
   const mins = Math.floor(s / 60);
   const secs = s % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function formatCitation(citation: Citation): string {
-  const videoId = (() => {
-    try {
-      return new URL(citation.video_url).searchParams.get('v') ?? '';
-    } catch {
-      return '';
-    }
-  })();
+export function formatCitation(citation: Citation): string {
+  if (!citation.snippet?.trim()) return '';
+
+  let videoId = '';
+  try {
+    videoId = new URL(citation.video_url).searchParams.get('v') ?? '';
+  } catch {
+    console.warn(
+      `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
+    );
+  }
+
   const externalUrl = videoId
     ? `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(citation.start_seconds)}s`
     : '';
   const start = formatTimestamp(citation.start_seconds);
   const end = formatTimestamp(citation.end_seconds);
-  const link = externalUrl ? `[${citation.video_title}](${externalUrl})` : citation.video_title;
+  const link = externalUrl
+    ? `[${citation.video_title}](${externalUrl})`
+    : `${citation.video_title} (timestamp link unavailable)`;
   return `- ${link} — ${start}–${end}\n  > "${citation.snippet}"`;
 }
 
-function formatSources(sources: Citation[]): string {
+export function formatSources(sources: Citation[]): string {
   if (!sources || sources.length === 0) return '';
   return `\n\n**Sources:**\n${sources.map(formatCitation).join('\n')}`;
 }
