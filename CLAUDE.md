@@ -276,6 +276,7 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 |---|---|---|
 | `OPENROUTER_API_KEY` | **yes** | Authenticates embeddings and chat completions to OpenRouter |
 | `SUPADATA_API_KEY` | prod (YouTube ingestion) | Fetches YouTube transcripts via Supadata. Required for channel sync and manual ingestion |
+| `YOUTUBE_API_KEY` | No | Optional YouTube Data API v3 key. When set, real video descriptions are fetched during ingest and channel sync instead of using placeholder strings. |
 | `YOUTUBE_CHANNEL_ID` | prod (channel sync) | YouTube channel ID/handle to sync videos from via `POST /api/channels/sync` |
 | `CHANNEL_SYNC_TYPE` | prod (channel sync) | Content type filter for channel sync: `all`, `video`, `short`, `live`. Default: `video` |
 | `DATABASE_URL` | **yes** (prod + dev) | Postgres connection string. Shape: `postgresql://dynachat:<pw>@127.0.0.1:5433/dynachat`. The app refuses to start if this is unset (no SQLite fallback). |

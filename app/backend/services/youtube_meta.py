@@ -34,7 +34,7 @@ async def get_video_title(video_id: str) -> str | None:
                 return None
             title = resp.json().get("title")
             return str(title) if title else None
-    except Exception as exc:
+    except (httpx.HTTPError, OSError) as exc:
         logger.warning("oEmbed title fetch failed for %s: %s", video_id, exc)
         return None
 
@@ -50,6 +50,7 @@ async def get_video_description(video_id: str, api_key: str) -> str | None:
     falls back to the caller's placeholder string.
     """
     if not api_key:
+        logger.debug("YOUTUBE_API_KEY not set, description unavailable for %s", video_id)
         return None
 
     params = {
@@ -70,6 +71,6 @@ async def get_video_description(video_id: str, api_key: str) -> str | None:
                 return None
             description = items[0].get("snippet", {}).get("description", "")
             return description or None
-    except Exception as exc:
+    except (httpx.HTTPError, OSError) as exc:
         logger.warning("YouTube API description fetch failed for %s: %s", video_id, exc)
         return None
