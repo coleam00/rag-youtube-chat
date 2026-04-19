@@ -78,7 +78,7 @@ async def test_ingest_from_url_stores_timestamps():
             new_callable=AsyncMock,
             return_value=mock_video,
         ),
-        patch("backend.routes.ingest.chunk_video_timestamped", return_value=chunk_dicts),
+        patch("backend.routes.ingest.chunk_video_timestamped", return_value=(chunk_dicts, False)),
         patch("backend.routes.ingest.embed_batch", return_value=[[0.1] * 3, [0.2] * 3, [0.3] * 3]),
         patch(
             "backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock
@@ -94,9 +94,13 @@ async def test_ingest_from_url_stores_timestamps():
     assert response.status_code == 200
     assert response.json()["chunks_created"] == 3
 
-    # Verify that later chunks have non-zero start_seconds
+    # Verify timestamps
     calls = mock_create_chunk.call_args_list
     assert len(calls) == 3
+    # First chunk must have start_seconds=0.0
+    first_call_kwargs = calls[0].kwargs
+    assert first_call_kwargs["start_seconds"] == 0.0
+    assert first_call_kwargs["end_seconds"] == 30.0
     # Second chunk must have start_seconds=30.0 (not 0.0 — regression check)
     second_call_kwargs = calls[1].kwargs
     assert second_call_kwargs["start_seconds"] == 30.0
@@ -148,7 +152,7 @@ async def test_ingest_from_url_fallback_stores_timestamps_when_no_segments():
             new_callable=AsyncMock,
             return_value=mock_video,
         ),
-        patch("backend.routes.ingest.chunk_video_fallback", return_value=[fallback_chunk]),
+        patch("backend.routes.ingest.chunk_video_fallback", return_value=([fallback_chunk], False)),
         patch("backend.routes.ingest.embed_batch", return_value=[[0.1] * 3]),
         patch(
             "backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock

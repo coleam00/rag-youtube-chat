@@ -27,6 +27,12 @@ from backend.services.youtube_meta import get_video_title
 logger = logging.getLogger(__name__)
 
 
+class VideoIngestError(Exception):
+    """Raised when video ingest input is invalid (e.g., bad URL)."""
+
+    pass
+
+
 _client: Supadata | None = None
 
 
@@ -59,7 +65,11 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
         ValueError: If url is not a recognised YouTube URL.
         SupadataError: On Supadata API errors.
     """
-    parsed = parse_youtube_url(url)
+    try:
+        parsed = parse_youtube_url(url)
+    except ValueError as exc:
+        raise VideoIngestError(f"Invalid YouTube URL: {exc}") from exc
+
     client = _get_client()
 
     # SDK is synchronous; offload to a thread so we don't block the event loop.
@@ -96,4 +106,4 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
     }
 
 
-__all__ = ["SupadataError", "fetch_video_for_ingest"]
+__all__ = ["SupadataError", "VideoIngestError", "fetch_video_for_ingest"]

@@ -31,7 +31,7 @@ from backend.rag import retriever
 from backend.rag.chunker import chunk_video_fallback, chunk_video_timestamped
 from backend.rag.embeddings import embed_batch
 from backend.routes.channels import sync_channel as _sync_channel_impl
-from backend.services.video_ingest import fetch_video_for_ingest
+from backend.services.video_ingest import VideoIngestError, fetch_video_for_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,8 @@ async def _fetch_chunks_and_embeddings(url_str: str) -> tuple[dict, list[dict]]:
 
     try:
         supadata_data = await fetch_video_for_ingest(url_str, lang="en")
+    except VideoIngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SupadataError as exc:
         logger.error("Supadata fetch failed for '%s': %s", url_str, exc)
         raise HTTPException(status_code=503, detail=f"Transcript fetch failed: {exc}") from exc
@@ -98,9 +100,14 @@ async def _fetch_chunks_and_embeddings(url_str: str) -> tuple[dict, list[dict]]:
     segments = supadata_data.get("segments", [])
 
     if segments:
-        chunk_dicts: list[dict] = chunk_video_timestamped(segments)
+        chunk_dicts: list[dict]
+        chunk_dicts, had_errors = chunk_video_timestamped(segments)
+        if had_errors:
+            logger.warning("Chunker fell back to raw text for some segments for '%s'", url_str)
     else:
-        chunk_dicts = chunk_video_fallback({"title": title, "transcript": transcript})
+        chunk_dicts, had_errors = chunk_video_fallback({"title": title, "transcript": transcript})
+        if had_errors:
+            logger.warning("Chunker returned 0 chunks for '%s' — transcript may be empty", url_str)
     if not chunk_dicts:
         raise HTTPException(
             status_code=422,

@@ -6,6 +6,7 @@ and returns a list of contextualized text strings ready for embedding.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import tiktoken
@@ -14,6 +15,8 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from docling_core.types.doc.document import DocItemLabel, DoclingDocument
 
 from backend.config import HYBRID_CHUNKER_MAX_TOKENS
+
+logger = logging.getLogger(__name__)
 
 TimestampedSegment = dict[str, Any]
 
@@ -87,7 +90,7 @@ def chunk_video(video: dict) -> list[str]:
     return results
 
 
-def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
+def chunk_video_timestamped(segments: list[TimestampedSegment]) -> tuple[list[dict], bool]:
     """
     Chunk timestamped transcript segments using Docling HybridChunker.
 
@@ -101,15 +104,16 @@ def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
                   'text' (str). Timestamps are in seconds.
 
     Returns:
-        A list of dicts, each containing:
+        A tuple of (chunks, had_errors) where chunks is a list of dicts:
           - content: str (contextualized HybridChunker output)
           - start_seconds: float
           - end_seconds: float
           - snippet: str (original uncontextualized segment text)
-        Returns [] if segments is empty or all texts are empty.
+        had_errors is True if any chunker operation fell back to raw text.
+        Returns ([], False) if segments is empty or all texts are empty.
     """
     if not segments:
-        return []
+        return [], False
 
     tokenizer = OpenAITokenizer(
         tokenizer=tiktoken.get_encoding("cl100k_base"),
@@ -118,6 +122,8 @@ def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
     chunker = HybridChunker(tokenizer=tokenizer, merge_peers=True)
 
     results: list[dict] = []
+    had_errors = False
+
     for segment in segments:
         text: str = segment.get("text", "")
         if not text:
@@ -129,20 +135,23 @@ def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
         doc = _build_docling_document_from_text(text)
         try:
             chunk_iter = chunker.chunk(doc)
+            sub_chunks: list[dict] = []
             for chunk in chunk_iter:
                 try:
                     contextualized = chunker.contextualize(chunk)
                     content = contextualized.strip() if contextualized else ""
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "contextualize failed for segment starting at %s: %s", start_s, exc
+                    )
                     content = getattr(chunk, "text", "") or text
                     content = content.strip()
+                    had_errors = True
 
                 if not content:
                     continue
 
-                # Sub-divide: if HybridChunker splits a segment into multiple
-                # sub-chunks, distribute the segment's time evenly across them.
-                results.append(
+                sub_chunks.append(
                     {
                         "content": content,
                         "start_seconds": start_s,
@@ -150,8 +159,20 @@ def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
                         "snippet": text[:300],
                     }
                 )
-        except Exception:
-            # Fallback: store the raw text with original timestamps
+
+            # Distribute timestamps evenly across sub-chunks when HybridChunker
+            # splits a segment into multiple pieces (no worse than fallback's
+            # proportional timestamps, which are explicitly accepted).
+            if len(sub_chunks) > 1:
+                duration = end_s - start_s
+                step = duration / len(sub_chunks)
+                for i, sc in enumerate(sub_chunks):
+                    sc["start_seconds"] = start_s + i * step
+                    sc["end_seconds"] = start_s + (i + 1) * step
+
+            results.extend(sub_chunks)
+        except Exception as exc:
+            logger.warning("chunker.chunk failed for segment starting at %s: %s", start_s, exc)
             results.append(
                 {
                     "content": text.strip(),
@@ -160,11 +181,12 @@ def chunk_video_timestamped(segments: list[TimestampedSegment]) -> list[dict]:
                     "snippet": text[:300],
                 }
             )
+            had_errors = True
 
-    return results
+    return results, had_errors
 
 
-def chunk_video_fallback(video: dict) -> list[dict]:
+def chunk_video_fallback(video: dict) -> tuple[list[dict], bool]:
     """
     Chunk a video using the existing plain-text chunk_video() function,
     then add evenly-spaced estimated timestamps.
@@ -177,12 +199,14 @@ def chunk_video_fallback(video: dict) -> list[dict]:
         video: A dict with at minimum 'title' and 'transcript' keys.
 
     Returns:
-        A list of dicts as per chunk_video_timestamped, with estimated
-        start/end times and snippet = first 300 chars of content.
+        A tuple of (chunks, had_errors) where chunks are dicts as per
+        chunk_video_timestamped, with estimated start/end times and
+        snippet = first 300 chars of content. had_errors is True when
+        chunk_video returned an empty list (could indicate a chunker failure).
     """
     chunk_texts: list[str] = chunk_video(video)
     if not chunk_texts:
-        return []
+        return [], True
 
     transcript: str = video.get("transcript", "")
     # Heuristic: estimate 150 WPM for YouTube transcripts
@@ -202,7 +226,7 @@ def chunk_video_fallback(video: dict) -> list[dict]:
                 "snippet": content[:300],
             }
         )
-    return results
+    return results, False
 
 
 # ---------------------------------------------------------------------------

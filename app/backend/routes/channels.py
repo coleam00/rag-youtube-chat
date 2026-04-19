@@ -172,7 +172,7 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
             continue
 
         transcript = supadata_data["transcript"]
-        segments = supadata_data.get("segments", [])
+        video_segments = supadata_data.get("segments", [])
 
         if not transcript:
             logger.warning(
@@ -215,10 +215,19 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
         video_id = video_record["id"]
 
         # Chunk the transcript
-        if segments:
-            chunk_dicts: list[dict] = chunk_video_timestamped(segments)
+        if video_segments:
+            chunk_dicts: list[dict]
+            chunk_dicts, had_errors = chunk_video_timestamped(video_segments)
+            if had_errors:
+                logger.warning(
+                    "Chunker fell back to raw text for some segments for video %s", youtube_video_id
+                )
         else:
-            chunk_dicts = chunk_video_fallback({"title": title, "transcript": transcript})
+            chunk_dicts, had_errors = chunk_video_fallback(
+                {"title": title, "transcript": transcript}
+            )
+            if had_errors:
+                logger.warning("Chunker returned 0 chunks for video %s", youtube_video_id)
 
         if not chunk_dicts:
             logger.warning(

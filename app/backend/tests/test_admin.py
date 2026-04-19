@@ -320,9 +320,19 @@ async def test_resync_replaces_chunks_on_success(client):
             "description": "New Desc",
             "transcript": "brand new transcript content",
             "youtube_video_id": "dQw4w9WgXcQ",
-            "segments": [],
+            "segments": [
+                {"start": 0.0, "end": 30.0, "text": "Segment 1"},
+                {"start": 30.0, "end": 90.0, "text": "Segment 2"},
+                {"start": 90.0, "end": 120.0, "text": "Segment 3"},
+            ],
         }
     )
+
+    chunk_dicts = [
+        {"content": "new-0", "start_seconds": 0.0, "end_seconds": 30.0, "snippet": "Segment 1"},
+        {"content": "new-1", "start_seconds": 30.0, "end_seconds": 90.0, "snippet": "Segment 2"},
+        {"content": "new-2", "start_seconds": 90.0, "end_seconds": 120.0, "snippet": "Segment 3"},
+    ]
 
     # Stub the chunker + embedder so we don't need the real ONNX model.
     with (
@@ -331,8 +341,12 @@ async def test_resync_replaces_chunks_on_success(client):
             new=fake_supadata,
         ),
         patch(
-            "backend.routes.admin.chunk_video",
-            return_value=["new-0", "new-1", "new-2"],
+            "backend.routes.admin.chunk_video_timestamped",
+            return_value=(chunk_dicts, False),
+        ),
+        patch(
+            "backend.routes.admin.chunk_video_fallback",
+            return_value=([], False),
         ),
         patch(
             "backend.routes.admin.embed_batch",
@@ -347,6 +361,11 @@ async def test_resync_replaces_chunks_on_success(client):
 
     chunks = await repository.list_chunks_for_video(video["id"])
     assert [c["content"] for c in chunks] == ["new-0", "new-1", "new-2"]
+    # Assert timestamps — second chunk must not be 0.0 (regression check for issue #89)
+    second_chunk = next(c for c in chunks if c["content"] == "new-1")
+    assert second_chunk["start_seconds"] == 30.0
+    assert second_chunk["end_seconds"] == 90.0
+    assert second_chunk["snippet"] == "Segment 2"
 
 
 async def test_resync_unknown_video_returns_404(client):
@@ -375,12 +394,18 @@ async def test_add_video_by_url_succeeds(client):
 
     await _signup(client, ADMIN_EMAIL)
 
+    fallback_chunks = [
+        {"content": "c0", "start_seconds": 0.0, "end_seconds": 30.0, "snippet": "c0"},
+        {"content": "c1", "start_seconds": 30.0, "end_seconds": 60.0, "snippet": "c1"},
+    ]
+
     with (
         patch(
             "backend.routes.admin.fetch_video_for_ingest",
             new=fake_supadata,
         ),
-        patch("backend.routes.admin.chunk_video", return_value=["c0", "c1"]),
+        patch("backend.routes.admin.chunk_video_timestamped", return_value=([], False)),
+        patch("backend.routes.admin.chunk_video_fallback", return_value=(fallback_chunks, False)),
         patch(
             "backend.routes.admin.embed_batch",
             return_value=[[0.1] * 4, [0.2] * 4],
@@ -428,7 +453,14 @@ async def test_add_video_rejects_duplicate(client):
             "backend.routes.admin.fetch_video_for_ingest",
             new=fake_supadata,
         ),
-        patch("backend.routes.admin.chunk_video", return_value=["c0"]),
+        patch("backend.routes.admin.chunk_video_timestamped", return_value=([], False)),
+        patch(
+            "backend.routes.admin.chunk_video_fallback",
+            return_value=(
+                [{"content": "c0", "start_seconds": 0.0, "end_seconds": 30.0, "snippet": "c0"}],
+                False,
+            ),
+        ),
         patch("backend.routes.admin.embed_batch", return_value=[[0.1] * 4]),
     ):
         r = await client.post(

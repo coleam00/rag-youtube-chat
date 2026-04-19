@@ -212,7 +212,7 @@ async def test_ingest_from_url_happy_path():
         ) as mock_create_video,
         patch(
             "backend.routes.ingest.chunk_video_timestamped",
-            return_value=[chunk_dict],
+            return_value=([chunk_dict], False),
         ) as mock_chunk,
         patch(
             "backend.routes.ingest.embed_batch",
@@ -315,7 +315,7 @@ async def test_ingest_from_url_empty_chunks_returns_stored_no_chunks():
         ),
         patch(
             "backend.routes.ingest.chunk_video_fallback",
-            return_value=[],  # empty transcript → 0 chunks
+            return_value=([], True),  # empty transcript → 0 chunks
         ),
     ):
         async with AsyncClient(

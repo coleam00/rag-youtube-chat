@@ -20,7 +20,7 @@ from backend.ingest.youtube_url import parse_youtube_url
 from backend.rag import retriever
 from backend.rag.chunker import chunk_video_fallback, chunk_video_timestamped
 from backend.rag.embeddings import embed_batch
-from backend.services.video_ingest import fetch_video_for_ingest
+from backend.services.video_ingest import VideoIngestError, fetch_video_for_ingest
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +134,17 @@ async def ingest_video(body: IngestRequest) -> IngestResponse:
 
     if body.segments:
         # Precise timestamps from Supadata (#57)
-        chunk_dicts: list[dict] = chunk_video_timestamped(body.segments)
+        chunk_dicts: list[dict]
+        chunk_dicts, had_errors = chunk_video_timestamped(body.segments)
+        if had_errors:
+            logger.warning("Chunker fell back to raw text for some segments in '%s'", body.title)
     else:
         # Legacy plain-text ingest: estimated timestamps
-        chunk_dicts = chunk_video_fallback(video_dict)
+        chunk_dicts, had_errors = chunk_video_fallback(video_dict)
+        if had_errors:
+            logger.warning(
+                "Chunker returned 0 chunks for '%s' — transcript may be empty", body.title
+            )
 
     if not chunk_dicts:
         logger.warning("Chunker returned 0 chunks for video '%s'", body.title)
@@ -216,6 +223,8 @@ async def ingest_from_url(body: IngestFromUrlRequest) -> IngestFromUrlResponse:
     # 2. Fetch transcript + title via the unified helper (Supadata SDK + oEmbed).
     try:
         supadata_data = await fetch_video_for_ingest(url_str, lang="en")
+    except VideoIngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SupadataError as exc:
         logger.error("Supadata fetch failed for '%s': %s", url_str, exc)
         raise HTTPException(
@@ -239,9 +248,14 @@ async def ingest_from_url(body: IngestFromUrlRequest) -> IngestFromUrlResponse:
 
     # 4. Chunk the transcript using Docling HybridChunker
     if segments:
-        chunk_dicts: list[dict] = chunk_video_timestamped(segments)
+        chunk_dicts: list[dict]
+        chunk_dicts, had_errors = chunk_video_timestamped(segments)
+        if had_errors:
+            logger.warning("Chunker fell back to raw text for some segments in '%s'", title)
     else:
-        chunk_dicts = chunk_video_fallback({"title": title, "transcript": transcript})
+        chunk_dicts, had_errors = chunk_video_fallback({"title": title, "transcript": transcript})
+        if had_errors:
+            logger.warning("Chunker returned 0 chunks for '%s' — transcript may be empty", title)
 
     if not chunk_dicts:
         logger.warning("Chunker returned 0 chunks for video '%s'", title)

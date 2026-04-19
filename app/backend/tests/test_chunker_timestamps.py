@@ -18,7 +18,7 @@ class TestChunkVideoTimestamped:
             {"start": 0.0, "end": 10.5, "text": "Hello world this is a test"},
             {"start": 10.5, "end": 25.0, "text": "And this is another segment of the video."},
         ]
-        result = chunk_video_timestamped(segments)
+        result, _ = chunk_video_timestamped(segments)
 
         assert len(result) >= 1
         # At least one chunk should have the first segment's timestamps
@@ -30,7 +30,7 @@ class TestChunkVideoTimestamped:
     def test_snippet_is_original_segment_text(self) -> None:
         """snippet field contains the original uncontextualized segment text."""
         segments = [{"start": 0.0, "end": 5.0, "text": "Original transcript text here"}]
-        result = chunk_video_timestamped(segments)
+        result, _ = chunk_video_timestamped(segments)
 
         assert len(result) >= 1
         # Find the chunk that contains "Original transcript"
@@ -41,8 +41,9 @@ class TestChunkVideoTimestamped:
 
     def test_empty_segments_returns_empty_list(self) -> None:
         """Empty input returns empty list."""
-        result = chunk_video_timestamped([])
+        result, had_errors = chunk_video_timestamped([])
         assert result == []
+        assert had_errors is False
 
     def test_skips_empty_text_segments(self) -> None:
         """Segments with empty text are skipped."""
@@ -50,7 +51,7 @@ class TestChunkVideoTimestamped:
             {"start": 0.0, "end": 5.0, "text": ""},
             {"start": 5.0, "end": 10.0, "text": "Real content here"},
         ]
-        result = chunk_video_timestamped(segments)
+        result, _ = chunk_video_timestamped(segments)
         # Should not produce any chunks from the empty segment
         assert all("Real content" in c["content"] or "Real content" in c["snippet"] for c in result)
 
@@ -62,7 +63,7 @@ class TestChunkVideoFallback:
             "title": "Test Video",
             "transcript": " ".join(["word"] * 300),  # ~2 min at 150 WPM
         }
-        result = chunk_video_fallback(video)
+        result, _ = chunk_video_fallback(video)
 
         assert len(result) >= 1
         for i in range(1, len(result)):
@@ -75,7 +76,7 @@ class TestChunkVideoFallback:
             "title": "Test Video",
             "transcript": " ".join(["word"] * 300),
         }
-        result = chunk_video_fallback(video)
+        result, _ = chunk_video_fallback(video)
 
         for chunk in result:
             assert chunk["end_seconds"] >= chunk["start_seconds"]
@@ -86,7 +87,7 @@ class TestChunkVideoFallback:
             "title": "Test Video",
             "transcript": "A" * 500,
         }
-        result = chunk_video_fallback(video)
+        result, _ = chunk_video_fallback(video)
 
         assert len(result) >= 1
         for chunk in result:
@@ -95,5 +96,6 @@ class TestChunkVideoFallback:
     def test_empty_transcript_returns_empty(self) -> None:
         """Empty transcript returns empty list."""
         video = {"title": "Test", "transcript": ""}
-        result = chunk_video_fallback(video)
+        result, had_errors = chunk_video_fallback(video)
         assert result == []
+        assert had_errors is True
