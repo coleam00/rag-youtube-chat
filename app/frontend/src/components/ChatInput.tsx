@@ -10,10 +10,11 @@ interface ChatInputProps {
   onSend: (content: string) => void;
   isStreaming?: boolean;
   disabled?: boolean;
+  onStop?: () => void;
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  ({ onSend, isStreaming = false, disabled = false }, ref) => {
+  ({ onSend, isStreaming = false, disabled = false, onStop }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [focused, setFocused] = useState(false);
 
@@ -114,46 +115,56 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           }}
         />
 
-        {/* ── Send button ── */}
-        <button
-          onClick={handleSend}
-          disabled={isDisabled}
-          aria-label="Send message"
-          style={{
-            background: isDisabled ? '#1e293b' : '#3b82f6',
-            border: 'none',
-            borderRadius: 8,
-            color: isDisabled ? '#475569' : '#fff',
-            cursor: isDisabled ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            height: 34,
-            width: 34,
-            transition: 'background 0.15s, color 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            if (!isDisabled) e.currentTarget.style.background = '#1d4ed8';
-          }}
-          onMouseLeave={(e) => {
-            if (!isDisabled) e.currentTarget.style.background = '#3b82f6';
-          }}
-        >
-          {isStreaming ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle
-                cx="8"
-                cy="8"
-                r="5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeDasharray="14 6"
-                style={{ animation: 'spin 1s linear infinite', transformOrigin: '8px 8px' }}
-              />
+        {/* ── Send / Stop button ── */}
+        {isStreaming ? (
+          <button
+            onClick={onStop}
+            aria-label="Stop response"
+            style={{
+              background: '#dc2626',
+              border: 'none',
+              borderRadius: 8,
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              height: 34,
+              width: 34,
+              transition: 'background 0.15s',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <rect x="1" y="1" width="10" height="10" rx="1" />
             </svg>
-          ) : (
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            disabled={isDisabled}
+            aria-label="Send message"
+            style={{
+              background: isDisabled ? '#1e293b' : '#3b82f6',
+              border: 'none',
+              borderRadius: 8,
+              color: isDisabled ? '#475569' : '#fff',
+              cursor: isDisabled ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              height: 34,
+              width: 34,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              if (!isDisabled) e.currentTarget.style.background = '#1d4ed8';
+            }}
+            onMouseLeave={(e) => {
+              if (!isDisabled) e.currentTarget.style.background = '#3b82f6';
+            }}
+          >
             <svg
               width="16"
               height="16"
@@ -167,8 +178,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <line x1="8" y1="14" x2="8" y2="3" />
               <polyline points="3,8 8,3 13,8" />
             </svg>
-          )}
-        </button>
+          </button>
+        )}
       </div>
     );
   },

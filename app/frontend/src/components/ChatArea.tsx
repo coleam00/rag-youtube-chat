@@ -240,7 +240,7 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   const { messages, setMessages, loading, error, conversation } = useMessages(
     conversationId || null,
   );
-  const { streamingContent, streamingSources, isStreaming, startStream } = useStreamingResponse();
+  const { streamingContent, streamingSources, isStreaming, startStream, abortStream } = useStreamingResponse();
   const { addToast } = useToast();
   const { refresh: refreshAuth } = useAuth();
 
@@ -564,6 +564,7 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
             onSend={handleSend}
             isStreaming={isStreaming}
             disabled={!conversationId}
+            onStop={abortStream}
           />
         </div>
       )}
