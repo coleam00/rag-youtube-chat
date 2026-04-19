@@ -164,6 +164,7 @@ async def create_message(
                         user_id=user_id,
                         role="assistant",
                         content=assistant_text,
+                        sources=source_citations if source_citations else None,
                     )
                     # Auto-generate title on first assistant reply
                     await _maybe_set_conversation_title(conv_id, user_id, user_content)

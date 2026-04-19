@@ -444,26 +444,29 @@ async def create_message(
     user_id: str,
     role: str,
     content: str,
+    sources: list[dict] | None = None,
 ) -> dict | None:
     """Insert a message. Returns None if the conversation does not belong to the user."""
     msg_id = _new_id()
     now = _now()
+    sources_json = json.dumps(sources) if sources else None
     async with _acquire() as conn:
         # Verify ownership atomically — INSERT only succeeds if the conversation
         # row exists for this user. Prevents cross-user message injection even
         # if a route handler forgets to check.
         result = await conn.execute(
             """
-            INSERT INTO messages (id, conversation_id, role, content, created_at)
-            SELECT $1, $2, $3, $4, $5
+            INSERT INTO messages (id, conversation_id, role, content, sources, created_at)
+            SELECT $1, $2, $3, $4, $5, $6
             WHERE EXISTS (
-                SELECT 1 FROM conversations WHERE id = $6 AND user_id = $7
+                SELECT 1 FROM conversations WHERE id = $7 AND user_id = $8
             )
             """,
             msg_id,
             conversation_id,
             role,
             content,
+            sources_json,
             now,
             conversation_id,
             user_id,
@@ -476,6 +479,7 @@ async def create_message(
         "conversation_id": conversation_id,
         "role": role,
         "content": content,
+        "sources": sources,
         "created_at": now,
     }
 
@@ -494,7 +498,16 @@ async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
             conversation_id,
             user_id,
         )
-    return [dict(r) for r in rows]
+    results = []
+    for r in rows:
+        d = dict(r)
+        # Deserialize sources JSONB to Citation array if present
+        if d.get("sources"):
+            d["sources"] = json.loads(d["sources"])
+        else:
+            d["sources"] = None
+        results.append(d)
+    return results
 
 
 # ---------------------------------------------------------------------------
