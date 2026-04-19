@@ -33,7 +33,9 @@ async def _fetch_og_description(video_id: str) -> str | None:
         async with httpx.AsyncClient(
             timeout=10.0,
             follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"},
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+            },
         ) as client:
             resp = await client.get(watch_url)
             if resp.status_code != 200:
@@ -68,7 +70,7 @@ async def get_video_title(video_id: str) -> str | None:
                 logger.warning("oEmbed %s for %s: %s", resp.status_code, video_id, resp.text[:200])
                 return None
             title = resp.json().get("title")
-            return title or None
+            return str(title) if title else None
     except asyncio.CancelledError:
         raise
     except httpx.TimeoutException as exc:

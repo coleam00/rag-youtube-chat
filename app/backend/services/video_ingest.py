@@ -74,12 +74,12 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
     result = await asyncio.to_thread(client.transcript, url=url, lang=lang)
 
     content = getattr(result, "content", None)
+    transcript = ""
+    segments: list[dict[str, Any]] = []
     if isinstance(content, str):
         transcript = content
-        segments = []
     elif isinstance(content, list):
         parts: list[str] = []
-        segments: list[dict[str, Any]] = []  # type: ignore[no-redef]
         for chunk in content:
             text = getattr(chunk, "text", "") or ""
             offset_ms = getattr(chunk, "offset", 0) or 0
@@ -89,9 +89,7 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
             parts.append(text)
             segments.append({"start": start_s, "end": end_s, "text": text})
         transcript = " ".join(parts)
-    else:
-        transcript = ""
-        segments = []
+    # else: transcript stays "" and segments stays []
 
     fetched_title = await get_video_title(parsed.video_id)
     title = fetched_title or f"Video {parsed.video_id}"
