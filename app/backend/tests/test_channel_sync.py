@@ -539,6 +539,9 @@ async def test_sync_channel_stores_timestamps(temp_db_schema, bypass_auth):
         patch("backend.routes.channels.chunk_video_fallback", return_value=([], False)),
         patch("backend.routes.channels.embed_batch", return_value=[[0.1] * 512, [0.2] * 512]),
         patch("backend.services.supadata._get_client") as mock_get_client,
+        patch(
+            "backend.routes.channels.repo.create_chunk", new_callable=AsyncMock
+        ) as mock_create_chunk,
         patch("backend.rag.retriever.invalidate_cache"),
     ):
         mock_client = AsyncMock()
@@ -552,3 +555,16 @@ async def test_sync_channel_stores_timestamps(temp_db_schema, bypass_auth):
     data = response.json()
     assert data["videos_new"] == 1
     assert data["videos_error"] == 0
+
+    # Verify create_chunk received the real timestamps from segments, not 0.0
+    calls = mock_create_chunk.call_args_list
+    assert len(calls) == 2
+    first = calls[0].kwargs
+    assert first["start_seconds"] == 0.0
+    assert first["end_seconds"] == 30.0
+    assert first["snippet"] == "Intro."
+    # Regression check: non-first chunk must have non-zero start_seconds
+    second = calls[1].kwargs
+    assert second["start_seconds"] == 30.0
+    assert second["end_seconds"] == 90.0
+    assert second["snippet"] == "Main content."
