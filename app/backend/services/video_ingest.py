@@ -79,6 +79,7 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
         segments = []
     elif isinstance(content, list):
         parts: list[str] = []
+        segments: list[dict[str, Any]] = []  # type: ignore[no-redef]
         for chunk in content:
             text = getattr(chunk, "text", "") or ""
             offset_ms = getattr(chunk, "offset", 0) or 0
