@@ -456,7 +456,11 @@ nodes:
       echo "RESULT: tsc=$([ $TSC -eq 0 ] && echo PASS || echo FAIL) biome=$([ $BIOME -eq 0 ] && echo PASS || echo FAIL)"
       [ $TSC -eq 0 ] && [ $BIOME -eq 0 ]
     depends_on: [install-deps]
-    idle_timeout: 180000
+    # Bash nodes honor `timeout`, not `idle_timeout`. tsc on a cold worktree
+    # plus biome check routinely clears 2 min — the default bash timeout
+    # would SIGTERM mid-run and leave `| tail -30`'s buffer unflushed, so
+    # Archon captures empty stdout and the synthesizer reads infra failure.
+    timeout: 180000
 
   - id: run-tests-backend-p1
     bash: |
@@ -471,7 +475,9 @@ nodes:
       echo ""
       echo "TEST_RESULT_BACKEND=$([ $? -eq 0 ] && echo PASS || echo FAIL)"
     depends_on: [install-deps]
-    idle_timeout: 300000
+    # Bash nodes honor `timeout`, not `idle_timeout`. pytest -xvs against
+    # the real Postgres can exceed 2 min once the suite has >100 tests.
+    timeout: 300000
 
   - id: run-tests-frontend-p1
     bash: |
@@ -485,7 +491,8 @@ nodes:
       echo ""
       echo "TEST_RESULT_FRONTEND=$([ $? -eq 0 ] && echo PASS || echo FAIL)"
     depends_on: [install-deps]
-    idle_timeout: 300000
+    # Bash nodes honor `timeout`, not `idle_timeout`.
+    timeout: 300000
 
   # ═══════════════════════════════════════════════════════════════
   # PHASE 4: PASS-1 HOLDOUT REVIEWERS (parallel, fresh context)
@@ -735,7 +742,8 @@ nodes:
       echo "RESULT: tsc=$([ $TSC -eq 0 ] && echo PASS || echo FAIL) biome=$([ $BIOME -eq 0 ] && echo PASS || echo FAIL)"
       [ $TSC -eq 0 ] && [ $BIOME -eq 0 ]
     depends_on: [fix-issues]
-    idle_timeout: 180000
+    # Bash nodes honor `timeout`, not `idle_timeout`.
+    timeout: 180000
 
   - id: run-tests-backend-p2
     bash: |
@@ -749,7 +757,8 @@ nodes:
       echo ""
       echo "TEST_RESULT_BACKEND=$([ $? -eq 0 ] && echo PASS || echo FAIL)"
     depends_on: [fix-issues]
-    idle_timeout: 300000
+    # Bash nodes honor `timeout`, not `idle_timeout`.
+    timeout: 300000
 
   - id: run-tests-frontend-p2
     bash: |
@@ -762,7 +771,8 @@ nodes:
       echo ""
       echo "TEST_RESULT_FRONTEND=$([ $? -eq 0 ] && echo PASS || echo FAIL)"
     depends_on: [fix-issues]
-    idle_timeout: 300000
+    # Bash nodes honor `timeout`, not `idle_timeout`.
+    timeout: 300000
 
   - id: behavioral-validation-p2
     command: dark-factory-behavioral-validation-p2
