@@ -19,9 +19,7 @@ export function useConversations(searchQuery?: string) {
     const myId = ++fetchIdRef.current;
     try {
       setLoading(true);
-      const data = trimmed
-        ? await searchConversations(trimmed)
-        : await getConversations();
+      const data = trimmed ? await searchConversations(trimmed) : await getConversations();
       if (myId === fetchIdRef.current) setConversations(data);
     } catch (e) {
       if (myId === fetchIdRef.current) {
