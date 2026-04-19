@@ -449,7 +449,19 @@ async def create_message(
     """Insert a message. Returns None if the conversation does not belong to the user."""
     msg_id = _new_id()
     now = _now()
-    sources_json = json.dumps(sources) if sources else None
+    sources_json: str | None
+    if sources:
+        try:
+            sources_json = json.dumps(sources)
+        except (TypeError, ValueError) as exc:
+            logger.error(
+                "Failed to serialize sources for message in conversation %s: %s — saving without citations",
+                conversation_id,
+                exc,
+            )
+            sources_json = None
+    else:
+        sources_json = None
     async with _acquire() as conn:
         # Verify ownership atomically — INSERT only succeeds if the conversation
         # row exists for this user. Prevents cross-user message injection even
@@ -457,7 +469,7 @@ async def create_message(
         result = await conn.execute(
             """
             INSERT INTO messages (id, conversation_id, role, content, sources, created_at)
-            SELECT $1, $2, $3, $4, $5, $6
+            SELECT $1, $2, $3, $4, $5::jsonb, $6
             WHERE EXISTS (
                 SELECT 1 FROM conversations WHERE id = $7 AND user_id = $8
             )
@@ -502,8 +514,20 @@ async def list_messages(conversation_id: str, user_id: str) -> list[dict]:
     for r in rows:
         d = dict(r)
         # Deserialize sources JSONB to Citation array if present
+        # asyncpg returns JSONB as a raw JSON string when no type codec is registered
+        # (see db/postgres.py — no set_type_codec call). If a codec is ever added,
+        # this json.loads() call must be removed.
         if d.get("sources"):
-            d["sources"] = json.loads(d["sources"])
+            try:
+                d["sources"] = json.loads(d["sources"])
+            except (json.JSONDecodeError, TypeError) as exc:
+                logger.warning(
+                    "Failed to deserialize sources for message %s in conversation %s: %s",
+                    d.get("id"),
+                    conversation_id,
+                    exc,
+                )
+                d["sources"] = None
         else:
             d["sources"] = None
         results.append(d)

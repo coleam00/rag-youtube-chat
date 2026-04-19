@@ -44,7 +44,16 @@ Baseline snapshot already captured at `$ARTIFACTS_DIR/health-before.json`
    If the app has a sidebar, navigation, or dedicated library page, go
    there. If the video-add control is on the chat page, use it in place.
    If you cannot find any way to add a video, that is a FAIL.
-3. Enter the test video URL into the add-video input and submit.
+3. Enter the **test video URL** (from the "Fixed Test Video" section
+   above) into the add-video input and submit. This MUST exercise the
+   URL-only path — the app fetches the transcript server-side via
+   Supadata. DO NOT paste a transcript manually, DO NOT use any
+   developer/admin hidden form that accepts pre-fetched transcript
+   text, and DO NOT call `/api/ingest` directly with a `transcript`
+   field. The whole point of this scenario is to exercise
+   `/api/ingest/from-url` (or the admin equivalent that hits Supadata);
+   a manual-transcript fallback masks real regressions in the
+   Supadata → chunk → embed path.
 4. Wait for ingestion to complete. This may take 30-90s for transcript
    fetch + chunking + embedding. Poll the UI and also poll
    `curl -sf http://127.0.0.1:<backend_port>/api/health` for up to 180s
@@ -64,7 +73,9 @@ Baseline snapshot already captured at `$ARTIFACTS_DIR/health-before.json`
 
 FAIL if any of:
 - No add-video control found
-- Ingestion UI shows an error
+- Ingestion UI shows an error (including Supadata / transcript-fetch
+  errors — these are real regressions, not infra problems to work
+  around)
 - `chunk_count` did not increase within 180s
 - Test video does not appear in the library list
 

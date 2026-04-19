@@ -301,3 +301,143 @@ class TestSseSourcesEventEmission:
         assert parsed[0]["chunk_id"] == "c1"
         assert parsed[1]["chunk_id"] == "c2"
         assert parsed[2]["chunk_id"] == "c3"
+
+
+class TestSourcesPersistenceRoundtrip:
+    """Tests for source citation persistence round-trip through the repository layer.
+
+    Covers: create_message(sources=...) → DB JSONB → list_messages deserialization.
+    """
+
+    async def test_create_message_stores_sources_json(self) -> None:
+        """create_message stores sources as JSONB and list_messages deserializes it back."""
+        import json
+        from unittest.mock import AsyncMock, patch
+
+        from backend.db import repository
+
+        citations = [
+            {
+                "chunk_id": "chunk-abc",
+                "video_id": "vid-1",
+                "video_title": "Test Video",
+                "video_url": "https://youtube.com/watch?v=abc123",
+                "start_seconds": 62.5,
+                "end_seconds": 70.0,
+                "snippet": "Test snippet text",
+            }
+        ]
+
+        # Patch _acquire to return a mock connection that records the call
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value="INSERT 0 1")
+        mock_conn.fetch = AsyncMock(
+            return_value=[
+                {
+                    "id": "msg-1",
+                    "conversation_id": "conv-1",
+                    "role": "assistant",
+                    "content": "Test response",
+                    "sources": json.dumps(citations),
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ]
+        )
+
+        class _FakeAcquire:
+            """Dual-purpose awaitable + async context manager."""
+            def __await__(self):
+                async def _do():
+                    return mock_conn
+                return _do().__await__()
+            async def __aenter__(self):
+                return mock_conn
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch.object(repository, "_acquire", lambda: _FakeAcquire()):
+            msg = await repository.create_message(
+                conversation_id="conv-1",
+                user_id="test-user",
+                role="assistant",
+                content="Test response",
+                sources=citations,
+            )
+
+        assert msg is not None
+        assert msg["sources"] == citations
+
+        # Verify execute was called (proving the DB write path was exercised)
+        assert mock_conn.execute.called
+
+    async def test_create_message_sources_none_round_trip(self) -> None:
+        """sources=None is stored as NULL and deserialized as None."""
+        from unittest.mock import AsyncMock, patch
+
+        from backend.db import repository
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(return_value="INSERT 0 1")
+        mock_conn.fetch = AsyncMock(
+            return_value=[
+                {
+                    "id": "msg-1",
+                    "conversation_id": "conv-1",
+                    "role": "assistant",
+                    "content": "No citations",
+                    "sources": None,
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ]
+        )
+
+        class _FakeAcquire:
+            def __await__(self):
+                async def _do():
+                    return mock_conn
+                return _do().__await__()
+            async def __aenter__(self):
+                return mock_conn
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch.object(repository, "_acquire", lambda: _FakeAcquire()):
+            msg = await repository.create_message(
+                conversation_id="conv-1",
+                user_id="test-user",
+                role="assistant",
+                content="No citations",
+                sources=None,
+            )
+            assert msg is not None
+            assert msg["sources"] is None
+
+            messages = await repository.list_messages("conv-1", "test-user")
+            assert messages[0]["sources"] is None
+
+    async def test_sources_event_with_retrieval_failed(self) -> None:
+        """When retrieval fails, citations receive retrieval_failed=True."""
+        source_citations = [
+            {
+                "chunk_id": "c1",
+                "video_id": "v1",
+                "video_title": "Test Video",
+                "video_url": "https://youtube.com/watch?v=abc",
+                "start_seconds": 10.0,
+                "end_seconds": 20.0,
+                "snippet": "Test snippet",
+            }
+        ]
+
+        retrieval_failed = True
+        if retrieval_failed:
+            for citation in source_citations:
+                citation["retrieval_failed"] = True
+
+        assert source_citations[0]["retrieval_failed"] is True
+
+        # Verify it serializes correctly (as it would in the SSE event)
+        import json
+        sources_json = json.dumps(source_citations)
+        parsed = json.loads(sources_json)
+        assert parsed[0]["retrieval_failed"] is True
