@@ -21,24 +21,19 @@ export function formatTimestamp(seconds: number): string {
 export function formatCitation(citation: Citation): string {
   if (!citation.snippet?.trim()) return '';
 
-  let videoId = '';
+  let videoId: string;
   try {
     videoId = new URL(citation.video_url).searchParams.get('v') ?? '';
   } catch {
     console.warn(
       `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
     );
+    return `${citation.video_title} (timestamp link unavailable)`;
   }
 
-  const externalUrl = videoId
-    ? `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(citation.start_seconds)}s`
-    : '';
-  const start = formatTimestamp(citation.start_seconds);
-  const end = formatTimestamp(citation.end_seconds);
-  const link = externalUrl
-    ? `[${citation.video_title}](${externalUrl})`
-    : `${citation.video_title} (timestamp link unavailable)`;
-  return `- ${link} — ${start}–${end}\n  > "${citation.snippet}"`;
+  const externalUrl = `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(citation.start_seconds)}s`;
+  const link = `[${citation.video_title}](${externalUrl})`;
+  return `- ${link} — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}\n  > "${citation.snippet}"`;
 }
 
 export function formatSources(sources: Citation[]): string {

@@ -8,7 +8,6 @@ own oEmbed endpoint. No auth, no key, safe for 20-5000 calls per sync.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 
@@ -54,48 +53,31 @@ async def _fetch_og_description(video_id: str) -> str | None:
         return None
 
 
-async def get_video_title(video_id: str) -> str | None:
-    """Return the YouTube video title, or None if the lookup fails.
+async def _make_request(url: str, params: dict[str, str]) -> httpx.Response | None:
+    """Make an HTTP GET request, returning None on any failure."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, params=params)
+            return resp if resp.status_code == 200 else None
+    except Exception as exc:
+        logger.warning("HTTP request failed for %s: %s", url, exc)
+        return None
 
-    Never raises — a missing title falls back to the caller's placeholder.
-    """
+
+async def get_video_title(video_id: str) -> str | None:
+    """Return the YouTube video title, or None if the lookup fails."""
     params = {
         "url": f"https://www.youtube.com/watch?v={video_id}",
         "format": "json",
     }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(_OEMBED_URL, params=params)
-            if resp.status_code != 200:
-                logger.warning("oEmbed %s for %s: %s", resp.status_code, video_id, resp.text[:200])
-                return None
-            title = resp.json().get("title")
-            return title or None
-    except asyncio.CancelledError:
-        raise
-    except httpx.TimeoutException as exc:
-        logger.warning("oEmbed timeout for %s: %s", video_id, exc)
+    resp = await _make_request(_OEMBED_URL, params)
+    if resp is None:
         return None
-    except httpx.HTTPStatusError as exc:
-        logger.warning("oEmbed HTTP error %s for %s: %s", exc.response.status_code, video_id, exc)
-        return None
-    except httpx.NetworkError as exc:
-        logger.warning("oEmbed network error for %s: %s", video_id, exc)
-        return None
-    except Exception as exc:
-        logger.warning("oEmbed title fetch failed for %s: %s", video_id, exc)
-        return None
+    return resp.json().get("title") or None
 
 
 async def get_video_description(video_id: str) -> str | None:
-    """Return the YouTube video description, or None if the lookup fails.
-
-    Calls YouTube Data API v3 videos.list?part=snippet when YOUTUBE_API_KEY
-    is set. Returns None on any failure (no key, network error, quota exceeded)
-    so callers can fall back to placeholder text.
-
-    Never raises — a missing description falls back to the caller's placeholder.
-    """
+    """Return the YouTube video description, or None if the lookup fails."""
     from backend.config import YOUTUBE_API_KEY
 
     if not YOUTUBE_API_KEY:
@@ -107,38 +89,9 @@ async def get_video_description(video_id: str) -> str | None:
         "key": YOUTUBE_API_KEY,
         "hl": "en",
     }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(_YOUTUBE_API_URL, params=params)
-            if resp.status_code != 200:
-                logger.warning(
-                    "YouTube Data API %s for %s: %s",
-                    resp.status_code,
-                    video_id,
-                    resp.text[:200],
-                )
-                return None
-            items = resp.json().get("items", [])
-            if not items:
-                return None
-            description = items[0].get("snippet", {}).get("description", "")
-            return description or None
-    except asyncio.CancelledError:
-        raise
-    except httpx.TimeoutException as exc:
-        logger.warning("YouTube Data API timeout for %s: %s", video_id, exc)
+    resp = await _make_request(_YOUTUBE_API_URL, params)
+    if resp is None:
         return None
-    except httpx.HTTPStatusError as exc:
-        logger.warning(
-            "YouTube Data API HTTP error %s for %s: %s",
-            exc.response.status_code,
-            video_id,
-            exc,
-        )
-        return None
-    except httpx.NetworkError as exc:
-        logger.warning("YouTube Data API network error for %s: %s", video_id, exc)
-        return None
-    except Exception as exc:
-        logger.warning("YouTube Data API description fetch failed for %s: %s", video_id, exc)
-        return None
+    items = resp.json().get("items", [])
+    description = items[0].get("snippet", {}).get("description", "") if items else ""
+    return description or None
