@@ -188,18 +188,19 @@ async def serve_spa_or_static(path: str):
 
     if FRONTEND_DIST:
         try:
-            file_path = Path(FRONTEND_DIST) / path
-            if file_path.is_file():
-                return FileResponse(str(file_path))
+            dist_dir = Path(FRONTEND_DIST).resolve()
+            requested_path = (dist_dir / path).resolve()
+            # Guard against path traversal (e.g. path=../../etc/passwd)
+            if not requested_path.is_relative_to(dist_dir):
+                raise HTTPException(status_code=404)
+            if requested_path.is_file():
+                return FileResponse(str(requested_path))
         except OSError as exc:
             logger.error("Static file error for path=%s frontend_dist=%s: %s", path, FRONTEND_DIST, exc)
             raise HTTPException(status_code=500, detail="Static file error") from exc
 
     index_path = Path(FRONTEND_DIST) / "index.html" if FRONTEND_DIST else Path("index.html")
     if not index_path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"index.html not found. FRONTEND_DIST={FRONTEND_DIST!r}, cwd={os.getcwd()}. "
-            "Set FRONTEND_DIST environment variable or ensure index.html exists at current directory.",
-        )
+        # Pre-fix behavior: 404 JSON for unknown non-API paths when FRONTEND_DIST is unset
+        raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(str(index_path))
