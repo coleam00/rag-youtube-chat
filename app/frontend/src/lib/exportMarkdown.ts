@@ -28,7 +28,14 @@ export function formatCitation(citation: Citation): string {
     console.warn(
       `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
     );
-    return `${citation.video_title} (timestamp link unavailable)`;
+    return `${citation.video_title} (timestamp link unavailable) — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}`;
+  }
+
+  if (!videoId) {
+    console.warn(
+      `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
+    );
+    return `${citation.video_title} (timestamp link unavailable) — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}`;
   }
 
   const externalUrl = `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(citation.start_seconds)}s`;
