@@ -283,3 +283,59 @@ describe('Sidebar handleNewChat', () => {
     });
   });
 });
+
+describe('Sidebar logout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    navigateMock.mockReset();
+  });
+
+  it('shows the user email and a Log out button when authed', async () => {
+    render(
+      <MemoryRouter>
+        <Sidebar activeConversationId={undefined} isOpen={true} onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /log out/i })).toBeInTheDocument();
+  });
+
+  it('calls logout and navigates to /login when the button is clicked', async () => {
+    const logoutMock = vi.fn().mockResolvedValue(undefined);
+    const { useAuth } = await import('../hooks/useAuth');
+    vi.mocked(useAuth).mockReturnValue({
+      status: 'authed',
+      user: {
+        id: 'user-1',
+        email: 'test@example.com',
+        is_admin: false,
+        messages_used_today: 5,
+        messages_remaining_today: 20,
+        rate_window_resets_at: null,
+      } as never,
+      error: null,
+      signup: vi.fn(),
+      login: vi.fn(),
+      logout: logoutMock,
+      refresh: vi.fn(),
+    });
+
+    const onClose = vi.fn();
+    render(
+      <MemoryRouter>
+        <Sidebar activeConversationId={undefined} isOpen={true} onClose={onClose} />
+      </MemoryRouter>,
+    );
+
+    const logoutBtn = screen.getByRole('button', { name: /log out/i });
+    await act(async () => {
+      fireEvent.click(logoutBtn);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(logoutMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock).toHaveBeenCalledWith('/login');
+    expect(onClose).toHaveBeenCalled();
+  });
+});

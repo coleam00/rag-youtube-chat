@@ -408,13 +408,14 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const { conversations, loading, refetch, rename, filteredConversations } =
     useConversations(debouncedQuery);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [creatingNew, setCreatingNew] = useState(false);
   const [newChatError, setNewChatError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const { addToast } = useToast();
 
   // Debounce search query — 250ms per issue #92
@@ -491,6 +492,18 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
   const handleSelect = (id: string) => {
     navigate(`/c/${id}`);
     onClose();
+  };
+
+  // ── Logout ──
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      onClose();
+      navigate('/login');
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   // ── Rename ──
@@ -655,6 +668,66 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
             remaining={user.messages_remaining_today}
             resetsAt={user.rate_window_resets_at}
           />
+        )}
+
+        {/* ── User identity + logout row ── */}
+        {user && (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <span
+              title={user.email}
+              style={{
+                fontSize: 12,
+                color: '#94a3b8',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                flex: 1,
+                minWidth: 0,
+              }}
+            >
+              {user.email}
+            </span>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              title="Log out"
+              aria-label="Log out"
+              style={{
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 7,
+                color: '#94a3b8',
+                cursor: loggingOut ? 'not-allowed' : 'pointer',
+                padding: '5px 10px',
+                fontSize: 12,
+                opacity: loggingOut ? 0.6 : 1,
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                if (loggingOut) return;
+                e.currentTarget.style.background = '#1e293b';
+                e.currentTarget.style.color = '#f1f5f9';
+                e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#94a3b8';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              {loggingOut ? 'Signing out…' : 'Log out'}
+            </button>
+          </div>
         )}
 
         {/* ── Sidebar footer: branding + library button ── */}
