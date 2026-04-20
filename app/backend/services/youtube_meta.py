@@ -70,7 +70,7 @@ async def get_video_title(video_id: str) -> str | None:
                 logger.warning("oEmbed %s for %s: %s", resp.status_code, video_id, resp.text[:200])
                 return None
             title = resp.json().get("title")
-            return title or None
+            return str(title) if title else None
     except asyncio.CancelledError:
         raise
     except httpx.TimeoutException as exc:

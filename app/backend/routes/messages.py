@@ -119,6 +119,8 @@ async def create_message(
         chunks = await retrieve_hybrid(user_content, query_embedding, top_k=5)
         if chunks:
             context = _format_context(chunks)
+    except asyncio.CancelledError:
+        raise  # Must propagate to FastAPI for proper cancellation handling
     except Exception as exc:
         logger.warning("RAG retrieval failed (continuing without context): %s", exc)
         retrieval_failed = True

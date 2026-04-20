@@ -55,14 +55,26 @@ export function useStreamingResponse() {
         }
         if (res.status === 429) {
           // MISSION §10 #1 — daily cap hit. Body: {error, limit, window_hours, reset_at}.
-          const body = await res.json().catch(() => null);
+          let body: Record<string, unknown> | null = null;
+          try {
+            body = await res.json();
+          } catch (jsonErr) {
+            console.warn('[useStreamingResponse] Failed to parse 429 body:', jsonErr);
+          }
           if (body && typeof body === 'object' && 'limit' in body) {
-            throw new RateLimitError(body);
+            throw new RateLimitError(
+              body as { limit: number; window_hours: number; reset_at: string },
+            );
           }
           throw new Error('Daily message limit reached');
         }
         if (!res.ok) {
-          const errorText = await res.text().catch(() => '');
+          let errorText = '';
+          try {
+            errorText = await res.text();
+          } catch (textErr) {
+            console.warn('[useStreamingResponse] Failed to read error body:', textErr);
+          }
           throw new Error(`HTTP ${res.status}${errorText ? `: ${errorText}` : ''}`);
         }
         if (!res.body) throw new Error('No response body');
