@@ -163,17 +163,14 @@ async def stream_test():
 # In dev (FRONTEND_DIST unset), Caddy proxies / to Vite on 5173, so this
 # block is never reached — but the catch-all is harmless in that case.
 # ---------------------------------------------------------------------------
-_frontend_dist = FRONTEND_DIST
-
-
 @app.get("/", include_in_schema=False)
 async def serve_root():
     """Serve index.html for the root path (/) which doesn't match /{path:path})."""
-    index_path = Path(_frontend_dist) / "index.html" if _frontend_dist else Path("index.html")
+    index_path = Path(FRONTEND_DIST) / "index.html" if FRONTEND_DIST else Path("index.html")
     if not index_path.exists():
         raise HTTPException(
             status_code=500,
-            detail=f"index.html not found. FRONTEND_DIST={_frontend_dist!r}, cwd={os.getcwd()}. "
+            detail=f"index.html not found. FRONTEND_DIST={FRONTEND_DIST!r}, cwd={os.getcwd()}. "
             "Set FRONTEND_DIST environment variable or ensure index.html exists at current directory.",
         )
     return FileResponse(str(index_path))
@@ -189,20 +186,20 @@ async def serve_spa_or_static(path: str):
     if path == "api" or path.startswith("api/"):
         raise HTTPException(status_code=404)
 
-    if _frontend_dist:
+    if FRONTEND_DIST:
         try:
-            file_path = Path(_frontend_dist) / path
+            file_path = Path(FRONTEND_DIST) / path
             if file_path.is_file():
                 return FileResponse(str(file_path))
         except OSError as exc:
-            logger.error("Static file error for path=%s frontend_dist=%s: %s", path, _frontend_dist, exc)
+            logger.error("Static file error for path=%s frontend_dist=%s: %s", path, FRONTEND_DIST, exc)
             raise HTTPException(status_code=500, detail="Static file error") from exc
 
-    index_path = Path(_frontend_dist) / "index.html" if _frontend_dist else Path("index.html")
+    index_path = Path(FRONTEND_DIST) / "index.html" if FRONTEND_DIST else Path("index.html")
     if not index_path.exists():
         raise HTTPException(
             status_code=500,
-            detail=f"index.html not found. FRONTEND_DIST={_frontend_dist!r}, cwd={os.getcwd()}. "
+            detail=f"index.html not found. FRONTEND_DIST={FRONTEND_DIST!r}, cwd={os.getcwd()}. "
             "Set FRONTEND_DIST environment variable or ensure index.html exists at current directory.",
         )
     return FileResponse(str(index_path))

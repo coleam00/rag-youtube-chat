@@ -9,7 +9,7 @@ from backend.main import app
 @pytest.fixture
 def frontend_dist_empty(monkeypatch):
     """FRONTEND_DIST is unset — tests the bare fallback branch."""
-    monkeypatch.setattr("backend.main._frontend_dist", "")
+    monkeypatch.setattr("backend.main.FRONTEND_DIST", "")
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def frontend_dist_with_static(monkeypatch, tmp_path):
     (dist / "assets").mkdir()
     (dist / "assets" / "index-[hash].js").write_text("console.log('built');")
     (dist / "index.html").write_text("<!DOCTYPE html>")
-    monkeypatch.setattr("backend.main._frontend_dist", str(dist))
+    monkeypatch.setattr("backend.main.FRONTEND_DIST", str(dist))
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def frontend_dist_with_index(monkeypatch, tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir()
     (dist / "index.html").write_text("<!DOCTYPE html>")
-    monkeypatch.setattr("backend.main._frontend_dist", str(dist))
+    monkeypatch.setattr("backend.main.FRONTEND_DIST", str(dist))
 
 
 class TestServeSpaOrStatic:
