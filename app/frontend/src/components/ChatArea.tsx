@@ -12,7 +12,7 @@ import { CitationModal } from './CitationModal';
 import { Message } from './Message';
 
 function formatResetTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) || iso;
+  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 // ── Skeleton message rows ─────────────────────────────────────────
@@ -254,7 +254,6 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
-  const [, setForceUpdate] = useState(0);
 
   // Inline error state (for failed sends)
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -289,11 +288,7 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
     const el = scrollContainerRef.current;
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const shouldAutoScroll = distFromBottom < 100;
-    if (shouldAutoScroll !== autoScrollRef.current) {
-      autoScrollRef.current = shouldAutoScroll;
-      setForceUpdate((n) => n + 1);
-    }
+    autoScrollRef.current = distFromBottom < 100;
   }, []);
 
   // ── Send pending message after conversation is created ──
