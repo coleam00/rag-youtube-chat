@@ -57,10 +57,13 @@ export class AuthError extends Error {
 function formatDetail(detail: unknown): string | null {
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail)) {
-    const parts = detail.flatMap((d) =>
-      typeof d === 'object' && d !== null && 'msg' in d && typeof d.msg === 'string' ? [d.msg] : [],
-    );
-    return parts.length > 0 ? parts.join(', ') : null;
+    const msgs = detail
+      .filter(
+        (d): d is { msg: string } =>
+          typeof d === 'object' && d !== null && 'msg' in d && typeof d.msg === 'string',
+      )
+      .map((d) => d.msg);
+    return msgs.length > 0 ? msgs.join(', ') : null;
   }
   return null;
 }
