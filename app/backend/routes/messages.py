@@ -147,7 +147,7 @@ async def create_message(
 
     # 6. Stream the response
     async def event_generator() -> AsyncGenerator[str, None]:
-        full_response = []
+        full_response: list[str] = []
         try:
             async for sse_chunk in stream_chat(llm_messages, context=context):
                 # Intercept [DONE] to inject sources event first
@@ -249,7 +249,7 @@ def _is_refusal(text: str) -> bool:
         "don't have access to",
         "not part of my knowledge",
     )
-    return any(pattern in text.lower() for pattern in refusal_patterns)
+    return any(pattern.lower() in text.lower() for pattern in refusal_patterns)
 
 
 async def _maybe_set_conversation_title(

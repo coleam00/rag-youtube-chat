@@ -459,7 +459,7 @@ class TestRefusalSourcesSuppression:
         from backend.routes.messages import _is_refusal
 
         text = (
-            "Those topics aren't covered in any of the videos in my context — "
+            "Those topics are not covered in any of the videos in my context — "
             "they're focused entirely on Claude Code."
         )
         assert _is_refusal(text) is True
@@ -489,7 +489,7 @@ class TestRefusalSourcesSuppression:
         """Refusal detection is case-insensitive."""
         from backend.routes.messages import _is_refusal
 
-        text = "THOSE TOPICS AREN'T COVERED IN ANY OF THE VIDEOS"
+        text = "THOSE TOPICS NOT COVERED IN ANY OF THE VIDEOS"
         assert _is_refusal(text) is True
 
     def test_is_refusal_empty_text(self) -> None:
