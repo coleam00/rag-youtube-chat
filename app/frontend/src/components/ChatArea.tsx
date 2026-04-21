@@ -64,7 +64,7 @@ function EmptyState({ onStarterClick }: EmptyStateProps) {
   const starters = [
     'How do I use subagents in Claude Code?',
     'How should I structure an agent team?',
-    'How does Cole\'s complete agentic coding workflow look end-to-end?',
+    "How does Cole's complete agentic coding workflow look end-to-end?",
     'How do I turn Claude Code into an engineering team?',
   ];
 

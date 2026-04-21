@@ -59,7 +59,12 @@ function formatDetail(detail: unknown): string | null {
   if (Array.isArray(detail)) {
     const parts = detail
       .map((d) => {
-        if (d && typeof d === 'object' && 'msg' in d && typeof (d as { msg: unknown }).msg === 'string') {
+        if (
+          d &&
+          typeof d === 'object' &&
+          'msg' in d &&
+          typeof (d as { msg: unknown }).msg === 'string'
+        ) {
           return (d as { msg: string }).msg;
         }
         return null;
