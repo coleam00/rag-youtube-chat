@@ -24,14 +24,18 @@ function VideoCard({ video }: { video: Video }) {
       {/* Title */}
       <p className="text-sm font-semibold text-slate-100 mb-1.5 leading-tight">{video.title}</p>
 
-      {/* Description */}
-      {video.description && (
+      {/* Description / channel attribution */}
+      {video.channel_title ? (
+        <p className="text-xs text-slate-400 mb-2 leading-relaxed">
+          Synced from {video.channel_title}
+        </p>
+      ) : video.description ? (
         <p className="text-xs text-slate-400 mb-2 leading-relaxed">
           {video.description.length > 120
             ? video.description.slice(0, 117) + '…'
             : video.description}
         </p>
-      )}
+      ) : null}
 
       {/* URL link */}
       {video.url && (

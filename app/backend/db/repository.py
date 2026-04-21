@@ -57,20 +57,24 @@ async def create_video(
     description: str,
     url: str,
     transcript: str,
+    channel_id: str | None = None,
+    channel_title: str | None = None,
 ) -> dict:
     vid_id = _new_id()
     now = _now()
     async with _acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO videos (id, title, description, url, transcript, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO videos (id, title, description, url, transcript, channel_id, channel_title, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             vid_id,
             title,
             description,
             url,
             transcript,
+            channel_id,
+            channel_title,
             now,
         )
     return {
@@ -79,6 +83,8 @@ async def create_video(
         "description": description,
         "url": url,
         "transcript": transcript,
+        "channel_id": channel_id,
+        "channel_title": channel_title,
         "created_at": now,
     }
 
@@ -101,7 +107,7 @@ async def delete_video(video_id: str) -> None:
 async def list_videos() -> list[dict]:
     async with _acquire() as conn:
         rows = await conn.fetch(
-            "SELECT id, title, description, url, created_at FROM videos ORDER BY created_at DESC"
+            "SELECT id, title, description, url, created_at, channel_id, channel_title FROM videos ORDER BY created_at DESC"
         )
     return [dict(r) for r in rows]
 
@@ -272,7 +278,7 @@ async def list_videos_admin() -> list[dict]:
     async with _acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT v.id, v.title, v.description, v.url, v.created_at,
+            SELECT v.id, v.title, v.description, v.url, v.created_at, v.channel_id, v.channel_title,
                    (SELECT COUNT(*) FROM chunks c WHERE c.video_id = v.id) AS chunk_count
             FROM videos v
             ORDER BY v.created_at DESC

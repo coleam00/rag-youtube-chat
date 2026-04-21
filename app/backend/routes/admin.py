@@ -66,6 +66,8 @@ class AdminVideo(BaseModel):
     url: str
     created_at: str
     chunk_count: int
+    channel_id: str | None = None
+    channel_title: str | None = None
 
 
 class AdminVideosResponse(BaseModel):
@@ -165,6 +167,8 @@ async def list_videos_admin() -> AdminVideosResponse:
             url=r["url"],
             created_at=str(r["created_at"]),
             chunk_count=int(r["chunk_count"]),
+            channel_id=r.get("channel_id"),
+            channel_title=r.get("channel_title"),
         )
         for r in rows
     ]
