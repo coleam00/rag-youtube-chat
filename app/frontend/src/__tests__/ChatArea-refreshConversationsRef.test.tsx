@@ -16,7 +16,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatArea } from '../components/ChatArea';
-import { useToast } from '../hooks/useToast';
 import * as api from '../lib/api';
 
 // Mock useNavigate
@@ -69,7 +68,8 @@ vi.mock('../hooks/useStreamingResponse', () => ({
 
 vi.mock('../hooks/useToast', () => ({
   useToast: () => ({
-    addToast: vi.fn(),
+    addToast: addToastRef.current,
+    removeToast: vi.fn(),
   }),
 }));
 
@@ -85,10 +85,15 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
+// Mutable ref captured by the useToast mock factory - updated in beforeEach
+const addToastRef = { current: vi.fn() };
+
 describe('ChatArea refreshConversationsRef', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(api, 'getConversations').mockResolvedValue([]);
+    // Reset addToastRef to a fresh spy for each test
+    addToastRef.current = vi.fn();
   });
 
   /**
@@ -291,9 +296,6 @@ describe('ChatArea refreshConversationsRef', () => {
   it('should handle createConversation error gracefully', async () => {
     vi.spyOn(api, 'createConversation').mockRejectedValue(new Error('Server error'));
 
-    const addToastSpy = vi.fn();
-    vi.mocked(useToast).mockReturnValue({ addToast: addToastSpy, removeToast: vi.fn() });
-
     render(
       <MemoryRouter>
         <ChatArea conversationId={undefined} />
@@ -305,11 +307,12 @@ describe('ChatArea refreshConversationsRef', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Test' } });
     fireEvent.click(screen.getByRole('button', { name: /send/i }));
 
-    await waitFor(() => {
-      expect(addToastSpy).toHaveBeenCalledWith(
-        'Could not create conversation. Please try again.',
-        'error',
-      );
-    });
+    // Wait for the error to propagate
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(addToastRef.current).toHaveBeenCalledWith(
+      'Could not create conversation. Please try again.',
+      'error',
+    );
   });
 });

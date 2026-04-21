@@ -291,27 +291,6 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
     autoScrollRef.current = distFromBottom < 100;
   }, []);
 
-  // ── Send pending message after conversation is created ──
-  // handleSend is intentionally omitted from the deps array below. It is memoized via
-  // useCallback with all required deps (navigate, setMessages, startStream, etc.), so it is
-  // guaranteed stable whenever conversationId is set. Adding it to the deps array would create
-  // a temporal-dead-zone error since handleSend is const-declared after this effect.
-  useEffect(() => {
-    if (conversationId && pendingMessageRef.current) {
-      const msg = pendingMessageRef.current;
-      pendingMessageRef.current = null;
-      // 2s timeout — if handleSend hasn't completed by then, show error to user.
-      // This catches the silent-failure path where conversationId is set but the pending
-      // message never fires (e.g., component re-mount, race condition).
-      const timeoutId = setTimeout(() => {
-        addToast('Failed to send message. Please try again.', 'error');
-      }, 2000);
-      handleSend(msg);
-      return () => clearTimeout(timeoutId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId]);
-
   // ── Citation click handler (opens modal) ──
   const handleCitationClick = useCallback((citation: Citation) => {
     setSelectedCitation(citation);
@@ -418,6 +397,22 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
       refreshConversationsRef,
     ],
   );
+
+  // ── Send pending message after conversation is created ──
+  useEffect(() => {
+    if (!conversationId || !pendingMessageRef.current) return;
+
+    const msg = pendingMessageRef.current;
+    pendingMessageRef.current = null;
+    // 2s timeout — if handleSend hasn't completed by then, show error to user.
+    // This catches the silent-failure path where conversationId is set but the pending
+    // message never fires (e.g., component re-mount, race condition).
+    const timeoutId = setTimeout(() => {
+      addToast('Failed to send message. Please try again.', 'error');
+    }, 2000);
+    handleSend(msg);
+    return () => clearTimeout(timeoutId);
+  }, [conversationId, handleSend]);
 
   // ── Retry failed message — re-attempt the API call with same content ──
   const handleRetry = useCallback(() => {
