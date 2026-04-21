@@ -316,4 +316,90 @@ describe('VideoExplorer', () => {
       expect(screen.getByText('Watch on YouTube')).toBeInTheDocument();
     });
   });
+
+  describe('channel_title display', () => {
+    it('shows channel attribution when channel_title is present', async () => {
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        {
+          id: '1',
+          title: 'Test Video',
+          description: 'Old description',
+          url: 'https://youtube.com/watch?v=abc123',
+          created_at: '2024-01-01T00:00:00Z',
+          channel_title: 'Cole Medin',
+        },
+      ]);
+
+      const onClose = vi.fn();
+      render(<VideoExplorer isOpen={true} onClose={onClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Synced from Cole Medin')).toBeInTheDocument();
+      });
+      // Description should NOT be shown when channel_title is present
+      expect(screen.queryByText(/Old description/)).not.toBeInTheDocument();
+    });
+
+    it('falls back to description when channel_title is absent', async () => {
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        {
+          id: '1',
+          title: 'Test Video',
+          description: 'A test video description',
+          url: 'https://youtube.com/watch?v=abc123',
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ]);
+
+      const onClose = vi.fn();
+      render(<VideoExplorer isOpen={true} onClose={onClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('A test video description')).toBeInTheDocument();
+      });
+    });
+
+    it('renders nothing when both channel_title and description are absent', async () => {
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        {
+          id: '1',
+          title: 'Test Video',
+          description: '',
+          url: 'https://youtube.com/watch?v=abc123',
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ]);
+
+      const onClose = vi.fn();
+      render(<VideoExplorer isOpen={true} onClose={onClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Video')).toBeInTheDocument();
+      });
+      // No attribution text should appear
+      expect(screen.queryByText(/Synced from/)).not.toBeInTheDocument();
+    });
+
+    it('truncates long description when channel_title is absent', async () => {
+      const longDescription = 'A'.repeat(150);
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        {
+          id: '1',
+          title: 'Test Video',
+          description: longDescription,
+          url: 'https://youtube.com/watch?v=abc123',
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ]);
+
+      const onClose = vi.fn();
+      render(<VideoExplorer isOpen={true} onClose={onClose} />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Video')).toBeInTheDocument();
+      });
+      // Should be truncated with ellipsis
+      expect(screen.getByText('A'.repeat(117) + '…')).toBeInTheDocument();
+    });
+  });
 });

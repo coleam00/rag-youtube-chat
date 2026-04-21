@@ -47,7 +47,7 @@ def mock_oembed_title():
     """Stub the oEmbed title lookup so tests don't hit YouTube."""
     with patch(
         "backend.services.video_ingest.get_video_title",
-        new=AsyncMock(return_value="Fake oEmbed Title"),
+        new=AsyncMock(return_value=("Fake oEmbed Title", "Fake Channel Title")),
     ):
         yield
 
@@ -174,7 +174,7 @@ async def test_fetch_video_for_ingest_fallback_title_when_oembed_missing():
         patch("backend.services.video_ingest._get_client", return_value=fake_client),
         patch(
             "backend.services.video_ingest.get_video_title",
-            new=AsyncMock(return_value=None),
+            new=AsyncMock(return_value=(None, None)),
         ),
     ):
         data = await fetch_video_for_ingest("https://www.youtube.com/watch?v=abc123")

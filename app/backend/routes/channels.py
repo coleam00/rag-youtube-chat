@@ -202,6 +202,12 @@ async def sync_channel(limit: int | None = None, force: bool = False) -> SyncRes
 
         # Fetch channel title from oEmbed for human-readable attribution
         _dbg_video_title, channel_title = await get_video_title(youtube_video_id)
+        if channel_title is None:
+            logger.warning(
+                "oEmbed channel title unavailable for video %s (channel %s)",
+                youtube_video_id,
+                YOUTUBE_CHANNEL_ID,
+            )
 
         # Ingest through chunk → embed → store pipeline.
         # When force=True and the video already exists, reuse its row and
