@@ -56,23 +56,14 @@ export class AuthError extends Error {
  */
 function formatDetail(detail: unknown): string | null {
   if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    const parts = detail
-      .map((d) => {
-        if (
-          d &&
-          typeof d === 'object' &&
-          'msg' in d &&
-          typeof (d as { msg: unknown }).msg === 'string'
-        ) {
-          return (d as { msg: string }).msg;
-        }
-        return null;
-      })
-      .filter((p): p is string => p !== null);
-    return parts.length > 0 ? parts.join(', ') : null;
+  if (!Array.isArray(detail)) return null;
+  const parts: string[] = [];
+  for (const d of detail) {
+    if (d && typeof d === 'object' && 'msg' in d && typeof d.msg === 'string') {
+      parts.push(d.msg);
+    }
   }
-  return null;
+  return parts.length > 0 ? parts.join(', ') : null;
 }
 
 async function authRequest<T>(path: string, init: RequestInit): Promise<T> {

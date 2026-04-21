@@ -34,6 +34,12 @@ function SkeletonRow() {
   );
 }
 
+// ── Truncate text to maxLen with ellipsis ─────────────────────
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 3) + '…';
+}
+
 // ── Highlight matched substring in a title ──────────────────────
 function highlightMatch(title: string, query: string) {
   const q = query.trim();
@@ -85,11 +91,7 @@ function ConvItem({
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
-  const preview = conv.preview
-    ? conv.preview.length > 80
-      ? conv.preview.slice(0, 77) + '…'
-      : conv.preview
-    : null;
+  const preview = conv.preview ? truncate(conv.preview, 80) : null;
 
   const handleRenameCommit = () => {
     const trimmed = editValue.trim();
