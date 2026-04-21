@@ -272,3 +272,109 @@ async def test_version_remains_public(client):
     # 200 if the package is installed, 503 if metadata is missing — either
     # proves the route is not gated behind auth (auth would give 401).
     assert r.status_code in (200, 503)
+
+
+# ---------------------------------------------------------------------------
+# Admin-gated routes — library-mutation and channel-sync surfaces.
+#
+# These endpoints write to the shared video library or burn paid API budget
+# (Supadata, embeddings). They must be admin-only — a previous version of the
+# code gated them on get_current_user, meaning any signed-up user could trigger
+# a 30-minute full-channel backfill. Tests here verify the gate is in place.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def admin_email(monkeypatch):
+    """Configure ADMIN_USER_EMAIL for tests that need the admin identity.
+
+    is_admin_email() reads the attribute at call time via getattr, so
+    monkeypatching the module attribute is sufficient — no re-import needed.
+    """
+    from backend import config as _config
+
+    monkeypatch.setattr(_config, "ADMIN_USER_EMAIL", "admin@example.com")
+    return "admin@example.com"
+
+
+async def test_unauthenticated_channels_sync_returns_401(client):
+    r = await client.post("/api/channels/sync")
+    assert r.status_code == 401
+
+
+async def test_non_admin_channels_sync_returns_403(client, admin_email):
+    await client.post(
+        "/api/auth/signup",
+        json={"email": "regular1@example.com", "password": "password123"},
+    )
+    r = await client.post("/api/channels/sync")
+    assert r.status_code == 403
+
+
+async def test_unauthenticated_channels_sync_runs_returns_401(client):
+    r = await client.get("/api/channels/sync-runs")
+    assert r.status_code == 401
+
+
+async def test_non_admin_channels_sync_runs_returns_403(client, admin_email):
+    await client.post(
+        "/api/auth/signup",
+        json={"email": "regular2@example.com", "password": "password123"},
+    )
+    r = await client.get("/api/channels/sync-runs")
+    assert r.status_code == 403
+
+
+async def test_non_admin_ingest_returns_403(client, admin_email):
+    await client.post(
+        "/api/auth/signup",
+        json={"email": "regular3@example.com", "password": "password123"},
+    )
+    r = await client.post(
+        "/api/ingest",
+        json={
+            "title": "t",
+            "description": "d",
+            "url": "https://example.com",
+            "transcript": "tx",
+        },
+    )
+    assert r.status_code == 403
+
+
+async def test_non_admin_ingest_from_url_returns_403(client, admin_email):
+    await client.post(
+        "/api/auth/signup",
+        json={"email": "regular4@example.com", "password": "password123"},
+    )
+    r = await client.post(
+        "/api/ingest/from-url",
+        json={"url": "https://www.youtube.com/watch?v=abc12345678"},
+    )
+    assert r.status_code == 403
+
+
+async def test_unauthenticated_ingest_from_url_returns_401(client):
+    r = await client.post(
+        "/api/ingest/from-url",
+        json={"url": "https://www.youtube.com/watch?v=abc12345678"},
+    )
+    assert r.status_code == 401
+
+
+async def test_admin_gate_fails_closed_when_admin_email_unset(client, monkeypatch):
+    """If ADMIN_USER_EMAIL is unset, no one is admin — even the "first" user.
+
+    This is the fail-safe documented in is_admin_email(): a missing env var
+    must NOT grant admin by default. Regression guard against a future refactor
+    that treats "" as "allow everybody".
+    """
+    from backend import config as _config
+
+    monkeypatch.setattr(_config, "ADMIN_USER_EMAIL", "")
+    await client.post(
+        "/api/auth/signup",
+        json={"email": "anyone@example.com", "password": "password123"},
+    )
+    r = await client.post("/api/channels/sync")
+    assert r.status_code == 403

@@ -11,16 +11,23 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.auth.dependencies import get_current_user
+from backend.auth.dependencies import get_current_admin, get_current_user
 from backend.main import app
 
 
 @pytest.fixture(autouse=True)
 def bypass_auth():
-    """Ingest tests focus on cache behavior; satisfy the auth gate with a stub user."""
-    app.dependency_overrides[get_current_user] = lambda: {"id": "test-user", "email": "t@t"}
+    """Ingest tests focus on cache behavior; satisfy the auth gate with a stub user.
+
+    /api/ingest is admin-gated, so both get_current_user and get_current_admin
+    must be overridden — otherwise the admin check returns 403.
+    """
+    stub_user = {"id": "test-user", "email": "t@t"}
+    app.dependency_overrides[get_current_user] = lambda: stub_user
+    app.dependency_overrides[get_current_admin] = lambda: stub_user
     yield
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_admin, None)
 
 
 async def test_ingest_calls_invalidate_cache_after_chunks_stored():

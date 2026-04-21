@@ -21,16 +21,24 @@ os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/tes
 os.environ.setdefault("SUPADATA_API_KEY", "test-supadata-key")
 os.environ.setdefault("YOUTUBE_CHANNEL_ID", "UC_testchannel")
 
-from backend.auth.dependencies import get_current_user
+from backend.auth.dependencies import get_current_admin, get_current_user
 from backend.main import app
 
 
 @pytest.fixture(autouse=True)
 def bypass_auth():
-    """Satisfy the auth gate with a stub user."""
-    app.dependency_overrides[get_current_user] = lambda: {"id": "test-user", "email": "t@t"}
+    """Satisfy the auth gate with a stub user.
+
+    /api/ingest and /api/channels/sync are admin-gated, so stub both
+    get_current_user and get_current_admin — overriding only the former
+    leaves the admin check active and returns 403.
+    """
+    stub_user = {"id": "test-user", "email": "t@t"}
+    app.dependency_overrides[get_current_user] = lambda: stub_user
+    app.dependency_overrides[get_current_admin] = lambda: stub_user
     yield
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_admin, None)
 
 
 # ---------------------------------------------------------------------------

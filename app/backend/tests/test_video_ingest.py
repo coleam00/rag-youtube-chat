@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from backend.auth.dependencies import get_current_user
+from backend.auth.dependencies import get_current_admin, get_current_user
 from backend.ingest.youtube_url import parse_youtube_url
 from backend.main import app
 from backend.services.video_ingest import fetch_video_for_ingest
@@ -29,10 +29,17 @@ from backend.services.video_ingest import fetch_video_for_ingest
 
 @pytest.fixture(autouse=True)
 def bypass_auth():
-    """Satisfy the auth gate with a stub user."""
-    app.dependency_overrides[get_current_user] = lambda: {"id": "test-user", "email": "t@t"}
+    """Satisfy the auth gate with a stub user.
+
+    /api/ingest/from-url is admin-gated, so both get_current_user and
+    get_current_admin must be overridden — otherwise the admin check returns 403.
+    """
+    stub_user = {"id": "test-user", "email": "t@t"}
+    app.dependency_overrides[get_current_user] = lambda: stub_user
+    app.dependency_overrides[get_current_admin] = lambda: stub_user
     yield
     app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_admin, None)
 
 
 @pytest.fixture(autouse=True)

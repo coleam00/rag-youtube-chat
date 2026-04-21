@@ -94,17 +94,22 @@ from backend.routes import admin, auth, channels, conversations, ingest, message
 # rely on their own dependency/cookie behaviour).
 app.include_router(auth.router, prefix="/api")
 
-# All other API routes require authentication — MISSION.md §10 invariant:
+# User-scoped routes require authentication — MISSION.md §10 invariant:
 # "All chat access requires authentication — there is no anonymous mode."
 _auth_required = [Depends(get_current_user)]
 app.include_router(conversations.router, prefix="/api", dependencies=_auth_required)
 app.include_router(messages.router, prefix="/api", dependencies=_auth_required)
-app.include_router(ingest.router, prefix="/api", dependencies=_auth_required)
-app.include_router(channels.router, prefix="/api", dependencies=_auth_required)
 
-# Admin routes — gated on get_current_admin, which chains through
-# get_current_user, so an unauthenticated caller still gets 401 (not 403).
-app.include_router(admin.router, prefix="/api", dependencies=[Depends(get_current_admin)])
+# Library-mutation routes (ingest a video, backfill the whole channel) and
+# admin routes — all gated on get_current_admin. These endpoints write to the
+# shared video library or burn paid API budget (Supadata, embeddings), so they
+# are not safe to expose to arbitrary authenticated users. get_current_admin
+# chains through get_current_user, so an unauthenticated caller still gets 401
+# (not 403).
+_admin_required = [Depends(get_current_admin)]
+app.include_router(ingest.router, prefix="/api", dependencies=_admin_required)
+app.include_router(channels.router, prefix="/api", dependencies=_admin_required)
+app.include_router(admin.router, prefix="/api", dependencies=_admin_required)
 
 
 # ---------------------------------------------------------------------------
