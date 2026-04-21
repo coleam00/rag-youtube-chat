@@ -91,11 +91,18 @@ export function useStreamingResponse() {
             readResult = await reader.read();
           } catch (readErr) {
             // AbortController.abort() causes reader.read() to throw AbortError.
-            // Catch it here (inside try) so finally does NOT run before we can
-            // call onAbort — streaming state is still true at this point.
+            // Catch it here (inside try) to call onAbort before returning early.
+            // We must explicitly reset streaming state here since we bypass
+            // finally with the early return to suppress error UI.
             if (readErr instanceof Error && readErr.name === 'AbortError') {
+              // Reset streaming state before calling onAbort — finally would do
+              // this but we bypass finally with the early return to suppress
+              // error UI.
+              setIsStreaming(false);
+              setStreamingContent('');
+              setStreamingSources([]);
               onAbort?.();
-              return; // ← early return: no error UI, just restore input
+              return;
             }
             throw readErr;
           }
