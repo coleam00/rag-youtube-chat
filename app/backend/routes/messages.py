@@ -242,6 +242,22 @@ def _is_refusal(text: str) -> bool:
     """
     refusal_patterns = (
         "not covered in any of the videos",
+        # Contraction-form variants — the LLM often phrases the refusal as
+        # "aren't/isn't covered", which doesn't contain the substring "not".
+        # The E2E regression from pass-1 validation showed this: the model
+        # said "Those topics aren't covered in any of the videos in my
+        # context...", no pattern matched, and "Sources (N)" still rendered.
+        "aren't covered in any of the videos",
+        "aren't covered",
+        "isn't covered",
+        "aren't in the context",
+        "isn't in the context",
+        "aren't part of",
+        "isn't part of",
+        "aren't available",
+        "isn't available",
+        "aren't discussed",
+        "isn't discussed",
         "not in the context",
         "don't have information about",
         "can't help with that",

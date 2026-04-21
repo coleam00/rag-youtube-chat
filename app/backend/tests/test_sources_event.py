@@ -540,6 +540,36 @@ class TestRefusalSourcesSuppression:
         for text in additional_refusals:
             assert _is_refusal(text) is True, f"Failed on: {text}"
 
+    def test_is_refusal_detects_contraction_form(self) -> None:
+        """The exact prod refusal phrasing uses "aren't covered" (contraction),
+        which does not contain the substring "not". Without a pattern that
+        matches the contraction directly, the pattern list misses the most
+        common real-world case and "Sources (N)" still renders after an
+        off-topic refusal. Regression guard for the E2E failure on PR #134.
+        """
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "Those topics aren't covered in any of the videos in my context — "
+            "they're focused entirely on Claude Code, AI coding agents, and "
+            "development workflows."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_other_contractions(self) -> None:
+        """Other common contraction-form refusals the LLM may emit."""
+        from backend.routes.messages import _is_refusal
+
+        contraction_refusals = [
+            "That topic isn't covered in the source videos.",
+            "These concepts aren't part of the material I was given.",
+            "This isn't part of the context I have access to.",
+            "Those details aren't available in the videos provided.",
+            "That subject isn't discussed in any of the videos.",
+        ]
+        for text in contraction_refusals:
+            assert _is_refusal(text) is True, f"Failed on: {text}"
+
 
 class TestExtractTextFromSse:
     """Tests for _extract_text_from_sse helper."""
