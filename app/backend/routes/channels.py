@@ -58,7 +58,7 @@ class SyncRunsResponse(BaseModel):
 
 
 @router.post("/channels/sync", response_model=SyncResponse)
-async def sync_channel(limit: int | None = None) -> SyncResponse:
+async def sync_channel(limit: int | None = None, force: bool = False) -> SyncResponse:
     """
     Enumerate videos from the configured YouTube channel via Supadata,
     ingest any new videos (idempotent by youtube_video_id), and record a
@@ -68,6 +68,13 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
         limit: Max number of videos to process. Omit for full channel.
                Supadata returns videos newest-first, so limit=20 processes
                the 20 most recent videos.
+        force: When True, re-process videos that are already in the DB —
+               chunks are re-fetched, re-embedded, and atomically replaced
+               via replace_chunks_for_video. Used to backfill timestamp +
+               snippet data onto videos ingested before PR #100 landed
+               the timestamped-chunk pipeline (see issue #112). Default
+               False preserves the idempotent skip behaviour that the
+               scheduled sync relies on.
 
     This is a synchronous, sequential operation — all videos are processed
     before the HTTP response is returned. The caller (e.g. systemd timer)
@@ -144,7 +151,7 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
         )
 
         existing = await repo.get_video_by_youtube_id(youtube_video_id)
-        if existing is not None:
+        if existing is not None and not force:
             logger.info("Video %s already ingested, skipping", youtube_video_id)
             videos_new += 1
             await repo.update_sync_video_status(
@@ -192,29 +199,35 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
             supadata_data.get("description") or f"Synced from channel {YOUTUBE_CHANNEL_ID}"
         )
 
-        # Ingest through chunk → embed → store pipeline
-        try:
-            video_record = await repo.create_video(
-                title=title,
-                description=description,
-                url=youtube_url,
-                transcript=transcript,
-            )
-        except Exception as exc:
-            logger.error(
-                "Failed to create video record for %s: %s",
-                youtube_video_id,
-                exc,
-            )
-            videos_error += 1
-            await repo.update_sync_video_status(
-                video_id=sync_video_record["id"],
-                status="error",
-                error_message=f"Video creation failed: {exc}",
-            )
-            continue
+        # Ingest through chunk → embed → store pipeline.
+        # When force=True and the video already exists, reuse its row and
+        # replace its chunks in a single transaction below; otherwise create
+        # a new video record.
+        if existing is not None:
+            video_id = existing["id"]
+        else:
+            try:
+                video_record = await repo.create_video(
+                    title=title,
+                    description=description,
+                    url=youtube_url,
+                    transcript=transcript,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Failed to create video record for %s: %s",
+                    youtube_video_id,
+                    exc,
+                )
+                videos_error += 1
+                await repo.update_sync_video_status(
+                    video_id=sync_video_record["id"],
+                    status="error",
+                    error_message=f"Video creation failed: {exc}",
+                )
+                continue
 
-        video_id = video_record["id"]
+            video_id = video_record["id"]
 
         # Chunk the transcript
         if video_segments:
@@ -261,18 +274,39 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
             )
             continue
 
-        # Store chunks with timestamp data
+        # Store chunks with timestamp data. For re-processed (force=True)
+        # videos, replace_chunks_for_video atomically deletes old chunks and
+        # inserts the new ones inside one transaction — so a crash mid-replace
+        # can't leave the video with a half-old / half-new chunk set.
         try:
-            for idx, (chunk, embedding) in enumerate(zip(chunk_dicts, embeddings, strict=False)):
-                await repo.create_chunk(
-                    video_id=video_id,
-                    content=chunk["content"],
-                    embedding=embedding,
-                    chunk_index=idx,
-                    start_seconds=chunk["start_seconds"],
-                    end_seconds=chunk["end_seconds"],
-                    snippet=chunk["snippet"],
-                )
+            if existing is not None:
+                chunks_for_replace = [
+                    {
+                        "content": chunk["content"],
+                        "embedding": embedding,
+                        "chunk_index": idx,
+                        "start_seconds": chunk["start_seconds"],
+                        "end_seconds": chunk["end_seconds"],
+                        "snippet": chunk["snippet"],
+                    }
+                    for idx, (chunk, embedding) in enumerate(
+                        zip(chunk_dicts, embeddings, strict=False)
+                    )
+                ]
+                await repo.replace_chunks_for_video(video_id, chunks_for_replace)
+            else:
+                for idx, (chunk, embedding) in enumerate(
+                    zip(chunk_dicts, embeddings, strict=False)
+                ):
+                    await repo.create_chunk(
+                        video_id=video_id,
+                        content=chunk["content"],
+                        embedding=embedding,
+                        chunk_index=idx,
+                        start_seconds=chunk["start_seconds"],
+                        end_seconds=chunk["end_seconds"],
+                        snippet=chunk["snippet"],
+                    )
         except Exception as exc:
             logger.error(
                 "Failed to store chunks for video %s: %s",
@@ -293,7 +327,8 @@ async def sync_channel(limit: int | None = None) -> SyncResponse:
             status="ingested",
         )
         logger.info(
-            "Ingested video %s (%s): %d chunks",
+            "%s video %s (%s): %d chunks",
+            "Re-synced" if existing is not None else "Ingested",
             youtube_video_id,
             title,
             len(chunk_dicts),
