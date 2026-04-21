@@ -65,7 +65,9 @@ class TestServeSpaOrStatic:
         assert response.status_code == 200
         assert "<!DOCTYPE html>" in response.text
 
-    async def test_falls_back_to_index_html_when_frontend_dist_unset(self, frontend_dist_empty, monkeypatch, tmp_path):
+    async def test_falls_back_to_index_html_when_frontend_dist_unset(
+        self, frontend_dist_empty, monkeypatch, tmp_path
+    ):
         """When FRONTEND_DIST is unset, index.html is served from cwd if it exists."""
         # Create a temp index.html at cwd so this test is not affected by test environment
         cwd_index = tmp_path / "index.html"

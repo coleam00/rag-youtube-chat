@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type Video, getVideos, ingestVideo } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { type Video, getVideos, ingestVideo } from '../lib/api';
 
 // ── Skeleton card ────────────────────────────────────────────────
 function SkeletonCard() {

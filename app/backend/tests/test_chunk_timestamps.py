@@ -283,8 +283,8 @@ async def test_channel_sync_force_replaces_chunks_on_existing_video():
         patch("backend.rag.retriever.invalidate_cache"),
     ):
         mock_client = AsyncMock()
-        mock_client.youtube.channel.videos = (
-            lambda *args, **kwargs: MockChannelVideosResult(["existing1"])
+        mock_client.youtube.channel.videos = lambda *args, **kwargs: MockChannelVideosResult(
+            ["existing1"]
         )
         mock_get_client.return_value = mock_client
 
@@ -376,8 +376,8 @@ async def test_channel_sync_without_force_still_skips_existing_video():
         patch("backend.rag.retriever.invalidate_cache"),
     ):
         mock_client = AsyncMock()
-        mock_client.youtube.channel.videos = (
-            lambda *args, **kwargs: MockChannelVideosResult(["existing1"])
+        mock_client.youtube.channel.videos = lambda *args, **kwargs: MockChannelVideosResult(
+            ["existing1"]
         )
         mock_get_client.return_value = mock_client
 
