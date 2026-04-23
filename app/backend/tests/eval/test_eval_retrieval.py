@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.scripts.eval_retrieval import (
+    _extract_youtube_id,
     compute_category_metrics,
     load_baseline,
     load_cases,
@@ -20,6 +21,24 @@ from backend.scripts.eval_retrieval import (
     run_case,
     save_baseline,
 )
+
+
+class TestExtractYoutubeId:
+    def test_standard_watch_url(self):
+        assert _extract_youtube_id("https://www.youtube.com/watch?v=AgntBld001a") == "AgntBld001a"
+
+    def test_url_with_trailing_params(self):
+        assert (
+            _extract_youtube_id("https://www.youtube.com/watch?v=AgntBld001a&t=42s")
+            == "AgntBld001a"
+        )
+
+    def test_empty_url_returns_empty(self):
+        assert _extract_youtube_id("") == ""
+
+    def test_url_without_v_param_returns_empty(self):
+        assert _extract_youtube_id("https://example.com/nope") == ""
+
 
 # ----------------------------------------------------------------------
 # recall_at_k
@@ -250,6 +269,9 @@ class TestRunCase:
 
     @pytest.mark.asyncio
     async def test_returns_correct_metrics_on_success(self):
+        # Retriever returns DB UUIDs in `video_id` and YouTube URLs in
+        # `video_url`; the eval script extracts the YouTube ID from the URL
+        # so fixture IDs (like "v1") compare against the `?v=` URL param.
         case = {
             "id": "test-3",
             "query": "test query",
@@ -263,8 +285,18 @@ class TestRunCase:
         ):
             mock_embed.return_value = [0.1] * 1536
             mock_retrieve.return_value = [
-                {"video_id": "v1", "score": 0.9, "transcript_snippet": "test"},
-                {"video_id": "v2", "score": 0.8, "transcript_snippet": "test2"},
+                {
+                    "video_id": "db-uuid-1",
+                    "video_url": "https://www.youtube.com/watch?v=v1",
+                    "score": 0.9,
+                    "transcript_snippet": "test",
+                },
+                {
+                    "video_id": "db-uuid-2",
+                    "video_url": "https://www.youtube.com/watch?v=v2",
+                    "score": 0.8,
+                    "transcript_snippet": "test2",
+                },
             ]
             result = await run_case(case)
             assert result["id"] == "test-3"
@@ -272,11 +304,13 @@ class TestRunCase:
             assert result["recall5"] == 1.0
 
     @pytest.mark.asyncio
-    async def test_uses_history_over_query_when_available(self):
+    async def test_always_uses_query_field_even_with_history(self):
+        # Validator pass-1 finding: follow-up cases must still query on the
+        # current turn (`query`), not the previous turn (`history[-1]`).
         case = {
             "id": "test-4",
-            "query": "original query",
-            "history": ["follow-up question"],
+            "query": "current-turn question",
+            "history": ["previous-turn question"],
             "expected_video_ids": [],
             "category": "follow_up",
         }
@@ -295,4 +329,4 @@ class TestRunCase:
         ):
             mock_retrieve.return_value = []
             await run_case(case)
-            assert used_query == "follow-up question"
+            assert used_query == "current-turn question"

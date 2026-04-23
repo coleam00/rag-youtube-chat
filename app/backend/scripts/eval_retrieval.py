@@ -28,6 +28,7 @@ from typing import Any
 # but import is "from backend.rag..." so we need app/ (parents[2])
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from backend.db.postgres import close_pg_pool, init_pg_pool
 from backend.rag.embeddings import embed_text
 from backend.rag.retriever_hybrid import retrieve_hybrid
 
@@ -108,7 +109,9 @@ async def run_case(case: dict) -> dict:
     category = case["category"]
     expected_video_ids = case.get("expected_video_ids", [])
 
-    query_text = case["history"][-1] if case.get("history") else case["query"]
+    # Always use the current-turn query; `history` is context for follow-up
+    # cases and is passed to the retriever only via the query's wording.
+    query_text = case["query"]
 
     try:
         query_embedding = embed_text(query_text)
@@ -125,7 +128,10 @@ async def run_case(case: dict) -> dict:
         logger.warning("Case %s: retrieval failed (%s) — counting as miss", case_id, exc)
         return _miss_result(case_id, category, expected_video_ids)
 
-    retrieved_video_ids = [r["video_id"] for r in results]
+    # Fixture expected_video_ids are YouTube video IDs (the `?v=` URL param),
+    # but retrieve_hybrid returns DB UUIDs in `video_id`. Extract the YouTube
+    # ID from each chunk's `video_url` so recall/MRR compare on stable IDs.
+    retrieved_video_ids = [_extract_youtube_id(r.get("video_url", "")) for r in results]
 
     return {
         "id": case_id,
@@ -136,6 +142,17 @@ async def run_case(case: dict) -> dict:
         "recall20": recall_at_k(retrieved_video_ids, expected_video_ids, k=20),
         "mrr10": mean_reciprocal_rank(retrieved_video_ids, expected_video_ids, k=10),
     }
+
+
+def _extract_youtube_id(video_url: str) -> str:
+    """
+    Extract the YouTube video ID from a URL like
+    ``https://www.youtube.com/watch?v=XXXXXXXXXXX``. Returns ``""`` if the URL
+    is empty or doesn't contain a ``v=`` parameter.
+    """
+    if not video_url or "v=" not in video_url:
+        return ""
+    return video_url.split("v=", 1)[1].split("&", 1)[0]
 
 
 def _miss_result(case_id: str, category: str, expected_video_ids: list[str]) -> dict:
@@ -177,14 +194,20 @@ async def main(args: argparse.Namespace) -> None:
 
     baseline = load_baseline()
 
-    print("Running retrieval evaluation (this may take a while)...")
-    results: list[dict] = []
-    for case in cases:
-        result = await run_case(case)
-        results.append(result)
-        # progress dot
-        print(".", end="", flush=True)
-    print()
+    # The retriever uses the Postgres pool directly; standalone scripts must
+    # init it explicitly (the FastAPI lifespan does this in the main app).
+    await init_pg_pool()
+    try:
+        print("Running retrieval evaluation (this may take a while)...")
+        results: list[dict] = []
+        for case in cases:
+            result = await run_case(case)
+            results.append(result)
+            # progress dot
+            print(".", end="", flush=True)
+        print()
+    finally:
+        await close_pg_pool()
 
     categories = ["narrow_single_video", "broad_cross_video", "follow_up", "out_of_scope"]
 
