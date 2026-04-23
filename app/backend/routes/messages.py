@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from backend import rate_limit
 from backend.auth.dependencies import get_current_user
-from backend.config import RETRIEVAL_MAX_PER_VIDEO
+from backend.config import RETRIEVAL_MAX_PER_VIDEO, RETRIEVAL_TOP_K
 from backend.db import repository
 from backend.llm.openrouter import stream_chat
 from backend.rag.embeddings import embed_text
@@ -118,7 +118,7 @@ async def create_message(
     retrieval_failed = False
     try:
         query_embedding = await asyncio.to_thread(embed_text, user_content)
-        chunks = await retrieve_hybrid(user_content, query_embedding, top_k=5)
+        chunks = await retrieve_hybrid(user_content, query_embedding, top_k=RETRIEVAL_TOP_K)
         if chunks:
             chunks = apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
             context = _format_context(chunks)
@@ -127,7 +127,9 @@ async def create_message(
     except Exception as exc:
         logger.warning(
             "RAG retrieval failed for user_id=%s query=%r (continuing without context): %s",
-            user_id, user_content[:50], exc
+            user_id,
+            user_content[:50],
+            exc,
         )
         retrieval_failed = True
 
