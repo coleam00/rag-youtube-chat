@@ -122,6 +122,7 @@ async def stream_chat(
     system_blocks = await build_system_prompt(max_tool_calls=max_tool_calls if tools_active else 0)
 
     full_messages: list[ChatCompletionMessageParam] = [
+        # openai stubs don't model list-content system messages; runtime accepts it.
         {"role": "system", "content": system_blocks},  # type: ignore[misc,list-item]
         *cast(list[ChatCompletionMessageParam], messages),
     ]

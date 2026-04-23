@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+from backend.config import CATALOG_CACHE_TTL_SECONDS
 from backend.db import repository
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,21 @@ _catalog_cache: list[dict] | None = None
 
 
 async def get_catalog() -> list[dict]:
-    """Return the cached video list, fetching from the DB on first call."""
+    """Return the cached video list, fetching from the DB on first call.
+
+    Returns an empty list on DB error so callers degrade gracefully.
+    """
     global _catalog_cache
     if _catalog_cache is None:
-        _catalog_cache = await repository.list_videos()
-        logger.info("Video catalog cache populated with %d videos.", len(_catalog_cache))
+        try:
+            _catalog_cache = await repository.list_videos()
+            logger.info("Video catalog cache populated with %d videos.", len(_catalog_cache))
+        except Exception:
+            logger.warning(
+                "Failed to populate video catalog cache; skipping catalog block.",
+                exc_info=True,
+            )
+            _catalog_cache = []  # prevent retry storm; cleared by next invalidate_catalog()
     return _catalog_cache
 
 
@@ -51,7 +62,7 @@ def build_catalog_block(videos: list[dict], tier: str) -> dict:
 
     cache_control: dict = {"type": "ephemeral"}
     if tier == "extended":
-        cache_control["ttl"] = "1h"
+        cache_control["ttl"] = CATALOG_CACHE_TTL_SECONDS  # integer seconds per Anthropic API
 
     return {
         "type": "text",

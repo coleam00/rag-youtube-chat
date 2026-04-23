@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from backend.rag import catalog
+
+# ---------------------------------------------------------------------------
+# Autouse fixture: reset module-level cache between tests for isolation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def reset_catalog_cache() -> Generator[None, None, None]:
+    """Ensure _catalog_cache is None before and after every test."""
+    catalog._catalog_cache = None
+    yield
+    catalog._catalog_cache = None
+
 
 # ---------------------------------------------------------------------------
 # get_catalog / invalidate_catalog
@@ -54,7 +70,7 @@ def test_build_catalog_block_standard() -> None:
 def test_build_catalog_block_extended() -> None:
     videos = [{"title": "My Video", "url": "https://youtube.com/watch?v=abc"}]
     block = catalog.build_catalog_block(videos, "extended")
-    assert block["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert block["cache_control"] == {"type": "ephemeral", "ttl": 3600}
 
 
 def test_build_catalog_block_untitled_fallback() -> None:
@@ -114,3 +130,40 @@ async def test_build_system_prompt_catalog_empty_library() -> None:
     # Empty library: no catalog block, cache anchor on base block
     assert len(blocks) == 1
     assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: CATALOG_TIER wiring, missing url, DB failure
+# ---------------------------------------------------------------------------
+
+
+def test_build_catalog_block_extended_ttl_is_integer() -> None:
+    """CATALOG_TIER='extended' must produce an integer ttl, not a string."""
+    with patch("backend.rag.catalog.CATALOG_CACHE_TTL_SECONDS", 3600):
+        videos = [{"title": "Vid", "url": "https://youtu.be/x"}]
+        block = catalog.build_catalog_block(videos, "extended")
+    assert isinstance(block["cache_control"]["ttl"], int)
+    assert block["cache_control"]["ttl"] == 3600
+
+
+def test_build_catalog_block_missing_url() -> None:
+    """Video dict without 'url' key must not raise a KeyError."""
+    videos = [{"title": "My Video"}]
+    block = catalog.build_catalog_block(videos, "standard")
+    assert "My Video" in block["text"]
+    # url defaults to empty string — no crash
+    assert block["type"] == "text"
+
+
+async def test_get_catalog_returns_empty_list_on_db_error() -> None:
+    """DB failure in list_videos must return [] and not raise, preventing retry storm."""
+    catalog._catalog_cache = None
+    with patch(
+        "backend.rag.catalog.repository.list_videos",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("DB unavailable"),
+    ):
+        result = await catalog.get_catalog()
+    assert result == []
+    # Cache is set to [] so the next call skips the DB entirely
+    assert catalog._catalog_cache == []
