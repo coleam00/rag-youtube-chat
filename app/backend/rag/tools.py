@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import defaultdict
 from typing import Any
 
 from backend.db import repository
@@ -178,11 +179,12 @@ async def _hydrate_chunks(raw_chunks: list[dict]) -> list[dict]:
         try:
             video = await repository.get_video(vid)
         except Exception as exc:
-            logger.warning("hydrate: get_video failed for %s: %s", vid, exc)
+            logger.warning("hydrate: get_video failed for %s: %s", vid, exc, exc_info=True)
             video = None
+        info = video or {}
         return vid, {
-            "title": video.get("title", "Unknown Video") if video else "Unknown Video",
-            "url": video.get("url", "") if video else "",
+            "title": info.get("title", "Unknown Video"),
+            "url": info.get("url", ""),
         }
 
     video_cache: dict[str, dict[str, str]] = dict(
@@ -228,6 +230,8 @@ _CANONICAL_CHUNK_KEYS = (
     "snippet",
 )
 
+_FLOAT_CHUNK_KEYS = frozenset(("start_seconds", "end_seconds"))
+
 
 def _normalize_chunk_shape(chunk: dict) -> dict:
     """Project a chunk dict onto the canonical citation shape.
@@ -239,7 +243,7 @@ def _normalize_chunk_shape(chunk: dict) -> dict:
     consistent regardless of which tool the model called.
     """
     return {
-        key: chunk.get(key, "" if key != "start_seconds" and key != "end_seconds" else 0.0)
+        key: chunk.get(key, 0.0 if key in _FLOAT_CHUNK_KEYS else "")
         for key in _CANONICAL_CHUNK_KEYS
     }
 
@@ -250,16 +254,23 @@ def _apply_per_video_cap(chunks: list[dict], max_per_video: int) -> list[dict]:
     Walks chunks in their input ranking order and drops a chunk once its
     video has already contributed ``max_per_video`` chunks. Preserves the
     relative ordering of the chunks that are kept. A very large cap value
-    effectively disables the filter.
+    effectively disables the filter. Passing ``max_per_video <= 0`` is a
+    no-op and returns the input list unchanged.
+
+    Chunks missing a ``video_id`` key (or with a falsy value) are always
+    passed through without counting against any cap bucket.
     """
     if max_per_video <= 0 or not chunks:
         return chunks
-    from collections import defaultdict
 
     per_video: dict[str, int] = defaultdict(int)
     kept: list[dict] = []
     for c in chunks:
-        vid = c.get("video_id", "")
+        vid = c.get("video_id")
+        if not vid:
+            # No video_id — pass through unconditionally; don't group under "".
+            kept.append(c)
+            continue
         if per_video[vid] >= max_per_video:
             continue
         kept.append(c)
@@ -346,7 +357,7 @@ async def execute_search_hybrid(
         embedding = await _embed_query(query, embedding_cache)
         chunks = await retrieve_hybrid(query, embedding, top_k=top_k)
     except Exception as exc:
-        logger.warning("search_hybrid failed: %s", exc)
+        logger.warning("search_hybrid failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
@@ -370,7 +381,7 @@ async def execute_search_keyword(raw_arguments: str | dict) -> dict[str, Any]:
         raw = await repository.keyword_search(query, top_k=top_k, language=KEYWORD_LANGUAGE)
         chunks = await _hydrate_chunks(raw)
     except Exception as exc:
-        logger.warning("search_keyword failed: %s", exc)
+        logger.warning("search_keyword failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
@@ -397,7 +408,7 @@ async def execute_search_semantic(
         raw = await repository.vector_search_pg(embedding, top_k=top_k)
         chunks = await _hydrate_chunks(raw)
     except Exception as exc:
-        logger.warning("search_semantic failed: %s", exc)
+        logger.warning("search_semantic failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)

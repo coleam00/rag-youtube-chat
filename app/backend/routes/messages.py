@@ -16,6 +16,7 @@ Orchestrates the tool-driven RAG flow:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -195,22 +196,49 @@ async def create_message(
                 full_response.append(sse_chunk)
                 yield sse_chunk
         finally:
-            # 7. Persist the complete assistant message
+            # 7. Persist the complete assistant message.
+            #
+            # Shield the DB writes from client-disconnect CancelledError.
+            # The tool-driven flow can take 30-60s before any token streams
+            # (the model runs several tool rounds before composing the final
+            # answer). Some clients/proxies abort long fetches in that window,
+            # which cancels this generator's task. Without asyncio.shield, the
+            # `await repository.create_message(...)` re-raises CancelledError
+            # immediately — and because CancelledError is a BaseException (not
+            # Exception) in Python 3.11, it bypasses the try/except below and
+            # silently drops the save. Shielding runs the save as a detached
+            # task that completes independently of the client's connection
+            # state; we catch the re-raised CancelledError so the generator
+            # can exit cleanly.
             assistant_text = _extract_text_from_sse(full_response)
             if assistant_text:
                 try:
-                    await repository.create_message(
-                        conversation_id=conv_id,
-                        user_id=user_id,
-                        role="assistant",
-                        content=assistant_text,
-                        sources=source_citations if source_citations else None,
+                    await asyncio.shield(
+                        repository.create_message(
+                            conversation_id=conv_id,
+                            user_id=user_id,
+                            role="assistant",
+                            content=assistant_text,
+                            sources=source_citations if source_citations else None,
+                        )
                     )
-                    # Auto-generate title on first assistant reply
-                    await _maybe_set_conversation_title(conv_id, user_id, user_content)
+                except asyncio.CancelledError:
+                    logger.info(
+                        "Client disconnected mid-persist; shielded create_message continues in background"
+                    )
                 except Exception as exc:
                     logger.error("Failed to persist assistant message: %s", exc)
-                    raise  # Re-raise to surface the error to FastAPI
+                    raise
+                # Title auto-generation is best-effort: client-disconnect swallowed,
+                # unexpected errors logged but not re-raised (message was saved above).
+                try:
+                    await asyncio.shield(
+                        _maybe_set_conversation_title(conv_id, user_id, user_content)
+                    )
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    logger.warning("Failed to update conversation title: %s", exc)
 
     return StreamingResponse(
         event_generator(),
