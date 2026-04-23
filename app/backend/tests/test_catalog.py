@@ -50,21 +50,6 @@ _SEEDED_VIDEOS = [
 
 
 # -------------------------------------------------------------------------- #
-# Reset cache between tests
-# -------------------------------------------------------------------------- #
-
-
-@pytest.fixture(autouse=True)
-def reset_catalog_cache():
-    """Ensure the module-level catalog cache is clean before and after every test."""
-    import backend.rag.catalog as catalog_mod
-
-    catalog_mod._catalog_cache = None
-    yield
-    catalog_mod._catalog_cache = None
-
-
-# -------------------------------------------------------------------------- #
 # Tests
 # -------------------------------------------------------------------------- #
 
@@ -141,15 +126,15 @@ class TestGetCatalogBlock:
             _ = await get_catalog_block()
             assert mock_list.call_count == 2
 
-    async def test_empty_library_returns_empty_string(self):
-        """Zero videos in DB returns empty string (not None)."""
+    async def test_empty_library_returns_none(self):
+        """Zero videos in DB returns None (no catalog block to inject)."""
         with patch(
             "backend.rag.catalog.repository.list_videos",
             new_callable=AsyncMock,
             return_value=[],
         ):
             result = await get_catalog_block()
-        assert result == ""
+        assert result is None
 
 
 class TestCatalogBlockInLlmRequestPayload:

@@ -30,8 +30,7 @@ async def get_catalog_block() -> str | None:
     """
     Return the cached catalog block, or fetch and render a new one if cold.
 
-    Returns None when CATALOG_ENABLED is False (safe rollback path).
-    Returns "" when the library is empty (no catalog block injected).
+    Returns None when CATALOG_ENABLED is False OR the library is empty.
     """
     if not CATALOG_ENABLED:
         return None
@@ -42,7 +41,7 @@ async def get_catalog_block() -> str | None:
 
     videos = await repository.list_videos()
     _catalog_cache = _render_catalog(videos, CATALOG_TIER)
-    return _catalog_cache
+    return _catalog_cache or None  # empty string becomes None
 
 
 def _render_catalog(videos: list[dict], tier: str) -> str:

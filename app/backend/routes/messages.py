@@ -160,8 +160,10 @@ async def create_message(
     if CATALOG_ENABLED:
         try:
             catalog_block = await get_catalog_block()
-        except Exception as exc:
-            logger.warning("Failed to fetch video catalog; proceeding without it: %s", exc)
+        except (IOError, OSError) as exc:
+            logger.warning("Failed to fetch video catalog (DB error); proceeding without it: %s", exc)
+        except RuntimeError as exc:
+            logger.warning("Failed to render video catalog; proceeding without it: %s", exc)
 
     # 7. Stream the response. The model drives retrieval via tool calls;
     # chunks it pulls flow into source_citations via tool_chunks_acc.

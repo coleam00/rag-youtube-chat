@@ -80,6 +80,59 @@ async def test_ingest_calls_invalidate_cache_after_chunks_stored():
         mock_invalidate.assert_called_once()
 
 
+async def test_ingest_calls_catalog_invalidate_cache_after_chunks_stored():
+    """invalidate_catalog_cache() must be called after chunks are stored."""
+    mock_video = {
+        "id": "v1",
+        "title": "T",
+        "description": "D",
+        "url": "http://x.com",
+        "transcript": "hi",
+    }
+    mock_embedding = [[0.1, 0.2, 0.3]]
+
+    with (
+        patch(
+            "backend.routes.ingest.repository.create_video",
+            new_callable=AsyncMock,
+            return_value=mock_video,
+        ),
+        patch(
+            "backend.routes.ingest.chunk_video_fallback",
+            return_value=(
+                [
+                    {
+                        "content": "chunk 1",
+                        "start_seconds": 0.0,
+                        "end_seconds": 10.0,
+                        "snippet": "chunk 1",
+                    }
+                ],
+                False,
+            ),
+        ),
+        patch("backend.routes.ingest.embed_batch", return_value=mock_embedding),
+        patch("backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock),
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache"),
+        patch(
+            "backend.routes.ingest.catalog_module.invalidate_catalog_cache"
+        ) as mock_catalog_invalidate,
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/ingest",
+                json={
+                    "title": "T",
+                    "description": "D",
+                    "url": "http://example.com/watch?v=abc",
+                    "transcript": "hi",
+                },
+            )
+
+        assert response.status_code == 200
+        mock_catalog_invalidate.assert_called_once()
+
+
 async def test_ingest_does_not_call_invalidate_cache_on_empty_chunks():
     """invalidate_cache() must NOT be called when the chunker returns no chunks."""
     mock_video = {

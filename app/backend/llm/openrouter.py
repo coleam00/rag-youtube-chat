@@ -11,6 +11,7 @@ continue until finish_reason=stop. Terminates with `data: [DONE]\\n\\n`.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -219,6 +220,8 @@ async def stream_chat(
                             payload = await tool_executor(
                                 tc["function"]["name"], tc["function"]["arguments"]
                             )
+                        except asyncio.CancelledError:
+                            raise  # Re-raise cancellation — do not convert to a tool failure payload
                         except Exception as exc:
                             logger.warning("tool executor raised: %s", exc)
                             payload = f"Error: tool execution failed: {exc}"
@@ -245,6 +248,8 @@ async def stream_chat(
         if tokens_yielded == 0:
             raise RuntimeError(f"OpenRouter streaming failed: {exc}") from exc
         yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+    except asyncio.CancelledError:
+        raise  # Request cancelled — propagate immediately
     except Exception as exc:
         logger.error("Unexpected error during streaming: %s", exc)
         if tokens_yielded == 0:
