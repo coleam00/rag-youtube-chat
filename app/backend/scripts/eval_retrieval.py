@@ -21,6 +21,7 @@ import logging
 import sys
 from pathlib import Path
 from statistics import mean
+from typing import Any
 
 # Ensure the backend package is on the path
 # scripts/ is at app/backend/scripts/, parents[1] is app/backend/,
@@ -39,24 +40,23 @@ BASELINE_PATH = SCRIPT_DIR.parent / "tests" / "eval" / "baseline.json"
 RETRIEVE_TOP_K = 20  # over-fetch for recall@20
 
 
-def load_cases() -> list[dict]:
+def load_cases() -> list[dict[str, Any]]:
     """Load test cases from the fixture file."""
     if not FIXTURE_PATH.exists():
         raise FileNotFoundError(
-            f"Fixture not found at {FIXTURE_PATH}. "
-            "Run from app/backend/ directory."
+            f"Fixture not found at {FIXTURE_PATH}. Run from app/backend/ directory."
         )
     with open(FIXTURE_PATH) as f:
-        data = json.load(f)
-    return data["cases"]
+        data: dict[str, Any] = json.load(f)
+    return data["cases"]  # type: ignore[no-any-return]
 
 
-def load_baseline() -> dict | None:
+def load_baseline() -> dict[str, Any] | None:
     """Load baseline metrics if present."""
     if not BASELINE_PATH.exists():
         return None
     with open(BASELINE_PATH) as f:
-        return json.load(f)
+        return json.load(f)  # type: ignore[no-any-return]
 
 
 def save_baseline(metrics: dict) -> None:
@@ -78,7 +78,9 @@ def recall_at_k(retrieved_video_ids: list[str], expected_video_ids: list[str], k
     return hits / len(expected_video_ids)
 
 
-def mean_reciprocal_rank(retrieved_video_ids: list[str], expected_video_ids: list[str], k: int) -> float:
+def mean_reciprocal_rank(
+    retrieved_video_ids: list[str], expected_video_ids: list[str], k: int
+) -> float:
     """
     Mean of 1/rank for each expected video ID that appears in top-k.
     Rank is 1-indexed. If none found, 0.
@@ -194,7 +196,7 @@ async def main(args: argparse.Namespace) -> None:
     print(header)
     print("-" * 75)
 
-    overall = {"recall5": [], "recall20": [], "mrr10": []}
+    overall: dict[str, list[float]] = {"recall5": [], "recall20": [], "mrr10": []}
 
     for cat in categories:
         metrics = compute_category_metrics(results, cat)
@@ -243,9 +245,7 @@ async def main(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Offline RAG retrieval evaluation harness."
-    )
+    parser = argparse.ArgumentParser(description="Offline RAG retrieval evaluation harness.")
     parser.add_argument(
         "--baseline",
         action="store_true",
