@@ -1,7 +1,5 @@
 """Tests for selection helpers (apply_per_video_cap)."""
 
-import pytest
-
 from backend.rag.selection import apply_per_video_cap
 
 
@@ -11,8 +9,7 @@ class TestApplyPerVideoCap:
     def test_all_same_video_capped(self):
         """10 chunks from same video, max_per_video=3 → returns 3."""
         chunks = [
-            {"video_id": "v1", "chunk_id": f"c{i}", "content": f"content {i}"}
-            for i in range(10)
+            {"video_id": "v1", "chunk_id": f"c{i}", "content": f"content {i}"} for i in range(10)
         ]
         result = apply_per_video_cap(chunks, max_per_video=3)
         assert len(result) == 3
