@@ -231,8 +231,7 @@ def _extract_text_from_sse(sse_chunks: list[str]) -> str:
             decoded = json.loads(content)
             if isinstance(decoded, str):
                 tokens.append(decoded)
-            # If it's something else (shouldn't happen), skip it
-        except ValueError:
+        except json.JSONDecodeError:
             # Fallback: treat as raw text (backward compat with unencoded tokens)
             tokens.append(content)
     return "".join(tokens)
