@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from backend.rag.catalog import (
     _render_catalog,
     get_catalog_block,

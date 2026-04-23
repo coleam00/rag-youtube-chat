@@ -160,8 +160,10 @@ async def create_message(
     if CATALOG_ENABLED:
         try:
             catalog_block = await get_catalog_block()
-        except (IOError, OSError) as exc:
-            logger.warning("Failed to fetch video catalog (DB error); proceeding without it: %s", exc)
+        except OSError as exc:
+            logger.warning(
+                "Failed to fetch video catalog (DB error); proceeding without it: %s", exc
+            )
         except RuntimeError as exc:
             logger.warning("Failed to render video catalog; proceeding without it: %s", exc)
 

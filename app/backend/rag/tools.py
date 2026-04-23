@@ -254,16 +254,15 @@ def _apply_per_video_cap(chunks: list[dict], max_per_video: int) -> list[dict]:
     """
     if max_per_video <= 0 or not chunks:
         return chunks
-    from collections import defaultdict
 
-    per_video: dict[str, int] = defaultdict(int)
+    per_video: dict[str, int] = {}
     kept: list[dict] = []
     for c in chunks:
         vid = c.get("video_id", "")
-        if per_video[vid] >= max_per_video:
+        if per_video.get(vid, 0) >= max_per_video:
             continue
         kept.append(c)
-        per_video[vid] += 1
+        per_video[vid] = per_video.get(vid, 0) + 1
     return kept
 
 
