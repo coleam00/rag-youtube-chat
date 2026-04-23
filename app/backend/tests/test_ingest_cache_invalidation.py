@@ -63,7 +63,7 @@ async def test_ingest_calls_invalidate_cache_after_chunks_stored():
         ),
         patch("backend.routes.ingest.embed_batch", return_value=mock_embedding),
         patch("backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock),
-        patch("backend.routes.ingest.retriever.invalidate_cache") as mock_invalidate,
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache") as mock_invalidate,
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
@@ -97,7 +97,7 @@ async def test_ingest_does_not_call_invalidate_cache_on_empty_chunks():
             return_value=mock_video,
         ),
         patch("backend.routes.ingest.chunk_video_fallback", return_value=([], True)),
-        patch("backend.routes.ingest.retriever.invalidate_cache") as mock_invalidate,
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache") as mock_invalidate,
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(

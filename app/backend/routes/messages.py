@@ -119,6 +119,7 @@ async def create_message(
     # ids); the search tools ignore it.
     source_citations: list[dict] = []
     tool_chunks_acc: list[dict] = []
+    embedding_cache: dict[str, list[float]] = {}
     tools_param: list[dict] | None = None
     executor = None
     max_tool_calls = 0
@@ -138,7 +139,12 @@ async def create_message(
             # the transcript tool falls back to open lookups instead of rejecting
             # every id.
             whitelist = video_id_whitelist if video_id_whitelist else None
-            result = await execute_tool(name, raw_args, video_id_whitelist=whitelist)
+            result = await execute_tool(
+                name,
+                raw_args,
+                video_id_whitelist=whitelist,
+                embedding_cache=embedding_cache,
+            )
             if result.get("ok") and result.get("chunks"):
                 tool_chunks_acc.extend(result["chunks"])
             return serialize_tool_result(result)
@@ -149,14 +155,18 @@ async def create_message(
 
     # 6. Stream the response. The model drives retrieval via tool calls;
     # chunks it pulls flow into source_citations via tool_chunks_acc.
+    # ``final_text_buf`` receives the assistant's final-round text so the
+    # refusal check ignores inter-round commentary ("let me try semantic").
     async def event_generator() -> AsyncGenerator[str, None]:
         full_response: list[str] = []
+        final_text_buf: list[str] = []
         try:
             async for sse_chunk in stream_chat(
                 llm_messages,
                 tools=tools_param,
                 tool_executor=executor,
                 max_tool_calls=max_tool_calls,
+                final_text_out=final_text_buf,
             ):
                 # Intercept [DONE] to inject the sources event first.
                 if sse_chunk == "data: [DONE]\n\n":
@@ -171,9 +181,15 @@ async def create_message(
                     # Only emit sources if we have any AND the model didn't refuse.
                     # Suppressing on refusal prevents misleading "Sources (N)" chips
                     # when the LLM correctly declined to use retrieved chunks.
+                    # Use only the final-round text so inter-round commentary
+                    # doesn't trigger false refusal matches.
                     if source_citations:
-                        assistant_text = _extract_text_from_sse(full_response)
-                        if not _is_refusal(assistant_text):
+                        final_text = (
+                            final_text_buf[0]
+                            if final_text_buf
+                            else _extract_text_from_sse(full_response)
+                        )
+                        if not _is_refusal(final_text):
                             sources_json = json.dumps(source_citations)
                             yield f"event: sources\ndata: {sources_json}\n\n"
                 full_response.append(sse_chunk)

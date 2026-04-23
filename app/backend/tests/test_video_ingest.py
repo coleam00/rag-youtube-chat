@@ -277,7 +277,7 @@ async def test_ingest_from_url_happy_path():
             "backend.routes.ingest.repository.create_chunk",
             new_callable=AsyncMock,
         ) as mock_create_chunk,
-        patch("backend.routes.ingest.retriever.invalidate_cache") as mock_invalidate,
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache") as mock_invalidate,
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app),
