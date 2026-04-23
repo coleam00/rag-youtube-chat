@@ -90,7 +90,7 @@ class TestExpandAndMerge:
 
     @pytest.mark.asyncio
     async def test_adjacent_chunks_merge_into_single_span(self):
-        """Adjacent chunks (indices 5 and 6) with window=1 merge into one span covering 4-7."""
+        """Adjacent chunks (indices 4, 5, 6) with window=1 merge into one span covering 4-6."""
         # _ORIG_CHUNK has chunk_index=5, neighbors are indices 4 and 6
         # With window=1, the three chunks (4,5,6) are all adjacent → one merged span
         chunks = [_ORIG_CHUNK]
@@ -193,3 +193,96 @@ class TestExpandAndMerge:
 
         await expand_and_merge(chunks, window=1, _fetch_neighbors=fake_neighbors)
         assert called, "fake_neighbors was not called"
+
+    @pytest.mark.asyncio
+    async def test_neighbors_fetch_exception_caught_and_logged(self):
+        """When _fetch_neighbors raises, the exception is logged and remaining chunks are processed."""
+        chunks = [
+            {
+                "chunk_id": "c5",
+                "video_id": "v1",
+                "content": "hello world",
+                "chunk_index": 5,
+                "start_seconds": 50.0,
+                "end_seconds": 60.0,
+                "snippet": "hello world snippet",
+                "video_title": "T",
+                "video_url": "u",
+            },
+        ]
+
+        async def throwing_neighbors(video_id, chunk_index, window):
+            raise RuntimeError("DB connection failed")
+
+        # Should NOT raise - exceptions are caught internally and logged
+        result = await expand_and_merge(chunks, window=1, _fetch_neighbors=throwing_neighbors)
+        # Returns the original chunk unchanged since all neighbor fetches failed
+        assert len(result) == 1
+        assert result[0]["chunk_id"] == "c5"
+
+    @pytest.mark.asyncio
+    async def test_overlapping_expansions_deduplicated(self):
+        """When two retrieved chunks share a neighbor, that neighbor appears only once."""
+        chunks = [
+            {
+                "chunk_id": "c4",
+                "video_id": "v1",
+                "content": "chunk 4",
+                "chunk_index": 4,
+                "start_seconds": 40.0,
+                "end_seconds": 50.0,
+                "snippet": "s4",
+                "video_title": "T",
+                "video_url": "u",
+            },
+            {
+                "chunk_id": "c6",
+                "video_id": "v1",
+                "content": "chunk 6",
+                "chunk_index": 6,
+                "start_seconds": 60.0,
+                "end_seconds": 70.0,
+                "snippet": "s6",
+                "video_title": "T",
+                "video_url": "u",
+            },
+        ]
+
+        async def fake_neighbors(video_id, chunk_index, window):
+            if chunk_index == 4:
+                return [
+                    {
+                        "id": "c3",
+                        "video_id": "v1",
+                        "content": "chunk 3",
+                        "chunk_index": 3,
+                        "start_seconds": 30.0,
+                        "end_seconds": 40.0,
+                        "snippet": "s3",
+                        "video_title": "T",
+                        "video_url": "u",
+                    }
+                ]
+            if chunk_index == 6:
+                return [
+                    {
+                        "id": "c7",
+                        "video_id": "v1",
+                        "content": "chunk 7",
+                        "chunk_index": 7,
+                        "start_seconds": 70.0,
+                        "end_seconds": 80.0,
+                        "snippet": "s7",
+                        "video_title": "T",
+                        "video_url": "u",
+                    }
+                ]
+            return []
+
+        result = await expand_and_merge(chunks, window=1, _fetch_neighbors=fake_neighbors)
+        # Indices 3,4 are adjacent (span 1) and 6,7 are adjacent (span 2) — 2 spans total
+        assert len(result) == 2
+        # Verify no chunk appears twice
+        all_contents = [r["content"] for r in result]
+        for content in all_contents:
+            assert all_contents.count(content) == 1

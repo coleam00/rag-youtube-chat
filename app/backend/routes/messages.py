@@ -180,6 +180,9 @@ async def create_message(
                                 tool_chunks_acc,
                                 window=RETRIEVAL_EXPANSION_WINDOW,
                             )
+                        except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+                            # Don't swallow cancellation - propagate it
+                            raise
                         except Exception as exc:
                             logger.warning(
                                 "Chunk expansion failed, using unexpanded chunks: %s", exc

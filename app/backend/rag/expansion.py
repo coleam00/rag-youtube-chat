@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 
 from backend.db import repository
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def expand_and_merge(
     chunks: list[dict],
     window: int = 1,
-    _fetch_neighbors=None,
+    _fetch_neighbors: Callable[[str, int, int], Awaitable[list[dict]]] | None = None,
 ) -> list[dict]:
     """
     Expand each retrieved chunk by its neighbors and merge into contiguous spans.
@@ -60,17 +61,16 @@ async def expand_and_merge(
     all_chunks: list[dict] = list(chunks)
 
     for video_id, video_chunks in video_groups.items():
+        logger.debug("Expanding %d chunks for video %s", len(video_chunks), video_id)
         neighbor_tasks = [
-            _fetch_neighbors(
-                video_id=video_id,
-                chunk_index=c["chunk_index"],
-                window=window,
-            )
-            for c in video_chunks
+            _fetch_neighbors(video_id, c["chunk_index"], window) for c in video_chunks
         ]
-        results = await asyncio.gather(*neighbor_tasks)
-        for neighbor_list in results:
-            for n in neighbor_list:
+        task_results = await asyncio.gather(*neighbor_tasks, return_exceptions=True)
+        for task_result in task_results:
+            if isinstance(task_result, BaseException):
+                logger.warning("Neighbor fetch failed for video %s: %s", video_id, task_result)
+                continue
+            for n in task_result:
                 n = dict(n)
                 n["video_id"] = video_id
                 all_chunks.append(n)
@@ -80,16 +80,17 @@ async def expand_and_merge(
     for c in all_chunks:
         by_video[c["video_id"]].append(c)
 
-    result: list[dict] = []
+    merged: list[dict] = []
     for _video_id, video_chunks in by_video.items():
         # Dedupe by chunk id
         seen: set[str] = set()
         unique_chunks: list[dict] = []
         for c in video_chunks:
             cid = c.get("chunk_id") or c.get("id")
-            if cid not in seen:
-                seen.add(cid)
-                unique_chunks.append(c)
+            if cid is None or cid in seen:
+                continue
+            seen.add(cid)
+            unique_chunks.append(c)
 
         unique_chunks.sort(key=lambda x: x["chunk_index"])
 
@@ -117,7 +118,7 @@ async def expand_and_merge(
                     break
 
             content = "\n\n".join(c["content"] for c in raw)
-            result.append(
+            merged.append(
                 {
                     "video_id": raw[0]["video_id"],
                     "video_title": raw[0].get("video_title", ""),
@@ -130,4 +131,4 @@ async def expand_and_merge(
                 }
             )
 
-    return result
+    return merged
