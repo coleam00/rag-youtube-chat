@@ -461,7 +461,7 @@ async def test_sync_channel_invalidate_cache_called(temp_db_schema, bypass_auth)
             patch("backend.routes.channels.chunk_video_timestamped", return_value=([], False)),
             patch("backend.routes.channels.chunk_video_fallback", return_value=(["chunk1"], False)),
             patch("backend.routes.channels.embed_batch", return_value=[[0.1] * 512]),
-            patch("backend.rag.retriever.invalidate_cache") as mock_invalidate,
+            patch("backend.rag.retriever_hybrid.invalidate_cache") as mock_invalidate,
         ):
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
@@ -545,7 +545,7 @@ async def test_sync_channel_stores_timestamps(temp_db_schema, bypass_auth):
         patch(
             "backend.routes.channels.repo.create_chunk", new_callable=AsyncMock
         ) as mock_create_chunk,
-        patch("backend.rag.retriever.invalidate_cache"),
+        patch("backend.rag.retriever_hybrid.invalidate_cache"),
     ):
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = make_mock_channel_videos(["tsync1"])
@@ -594,7 +594,7 @@ async def test_sync_channel_uses_real_description_from_supadata(temp_db_schema, 
         patch("backend.routes.channels.chunk_video_timestamped", return_value=([], False)),
         patch("backend.routes.channels.chunk_video_fallback", return_value=(["chunk1"], False)),
         patch("backend.routes.channels.embed_batch", return_value=[[0.1] * 512]),
-        patch("backend.rag.retriever.invalidate_cache"),
+        patch("backend.rag.retriever_hybrid.invalidate_cache"),
     ):
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = lambda *args, **kwargs: mock_supadata_records
@@ -632,7 +632,7 @@ async def test_sync_channel_falls_back_to_placeholder_when_no_description(
         patch("backend.routes.channels.chunk_video_timestamped", return_value=([], False)),
         patch("backend.routes.channels.chunk_video_fallback", return_value=(["chunk1"], False)),
         patch("backend.routes.channels.embed_batch", return_value=[[0.1] * 512]),
-        patch("backend.rag.retriever.invalidate_cache"),
+        patch("backend.rag.retriever_hybrid.invalidate_cache"),
     ):
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = lambda *args, **kwargs: mock_supadata_records

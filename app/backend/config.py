@@ -101,6 +101,11 @@ HYBRID_K_CONSTANT: int = 60
 HYBRID_OVERFETCH_FACTOR: int = 2
 KEYWORD_LANGUAGE: str = "english"
 
+# Per-video diversity cap applied after each search-tool call. Prevents one
+# long video from monopolizing the retrieved context on broad questions.
+# Set to a very large value (e.g. 999) to effectively disable.
+RETRIEVAL_MAX_PER_VIDEO: int = int(os.environ.get("RETRIEVAL_MAX_PER_VIDEO", "3"))
+
 # RAG tool-based retrieval — the LLM drives retrieval via tool calls
 # (search_videos, keyword_search_videos, semantic_search_videos,
 # get_video_transcript) rather than receiving pre-retrieved chunks. Disabled
@@ -114,6 +119,12 @@ LLM_TOOLS_ENABLED: bool = os.environ.get("LLM_TOOLS_ENABLED", "true").strip().lo
     "on",
 )
 LLM_TOOLS_MAX_PER_TURN: int = int(os.environ.get("LLM_TOOLS_MAX_PER_TURN", "6"))
+
+# Cap on how many characters the get_video_transcript tool returns to the
+# model. Long videos can produce 40K+ tokens of transcript; beyond ~30K
+# tokens the cost per call gets uncomfortable even on Sonnet's 200K window.
+# ~120K chars ≈ 30K tokens on English prose.
+TRANSCRIPT_TOOL_MAX_CHARS: int = int(os.environ.get("TRANSCRIPT_TOOL_MAX_CHARS", "120000"))
 
 # YouTube channel to sync from (used by POST /api/channels/sync)
 YOUTUBE_CHANNEL_ID: str = os.environ.get("YOUTUBE_CHANNEL_ID", "")

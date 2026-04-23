@@ -27,7 +27,7 @@ from supadata import SupadataError
 from backend.config import SUPADATA_API_KEY, YOUTUBE_CHANNEL_ID
 from backend.db import repository as repo
 from backend.ingest.youtube_url import parse_youtube_url
-from backend.rag import retriever
+from backend.rag import retriever_hybrid
 from backend.rag.chunker import chunk_video_fallback, chunk_video_timestamped
 from backend.rag.embeddings import embed_batch
 from backend.routes.channels import sync_channel as _sync_channel_impl
@@ -203,7 +203,7 @@ async def add_video(body: AddVideoRequest) -> AddVideoResponse:
     try:
         await repo.replace_chunks_for_video(video_id, chunks)
     finally:
-        retriever.invalidate_cache()
+        retriever_hybrid.invalidate_cache()
 
     logger.info("Admin added video %s (%s): %d chunks", video_id, metadata["title"], len(chunks))
     return AddVideoResponse(video_id=video_id, chunks_created=len(chunks), status="ok")
@@ -215,7 +215,7 @@ async def delete_video(video_id: str) -> None:
     deleted = await repo.delete_video_cascade(video_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Video not found")
-    retriever.invalidate_cache()
+    retriever_hybrid.invalidate_cache()
     logger.info("Admin deleted video %s", video_id)
 
 
@@ -236,7 +236,7 @@ async def resync_video(video_id: str) -> ResyncResponse:
     try:
         await repo.replace_chunks_for_video(video_id, chunks)
     finally:
-        retriever.invalidate_cache()
+        retriever_hybrid.invalidate_cache()
 
     logger.info("Admin re-synced video %s: %d chunks", video_id, len(chunks))
     return ResyncResponse(video_id=video_id, chunks_created=len(chunks), status="ok")

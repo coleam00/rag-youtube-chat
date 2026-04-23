@@ -168,6 +168,107 @@ async def test_search_empty_results_returns_canned_message(monkeypatch) -> None:
     assert result["chunks"] == []
 
 
+# --- Per-video diversity cap ----------------------------------------------
+
+
+def test_apply_per_video_cap_limits_same_video() -> None:
+    from backend.rag.tools import _apply_per_video_cap
+
+    chunks = [{"video_id": "v1", "chunk_id": f"c{i}"} for i in range(10)]
+    assert len(_apply_per_video_cap(chunks, max_per_video=3)) == 3
+
+
+def test_apply_per_video_cap_preserves_order_and_multi_video() -> None:
+    from backend.rag.tools import _apply_per_video_cap
+
+    chunks = [
+        {"video_id": "v1", "chunk_id": "c1"},
+        {"video_id": "v2", "chunk_id": "c2"},
+        {"video_id": "v1", "chunk_id": "c3"},
+        {"video_id": "v1", "chunk_id": "c4"},
+        {"video_id": "v1", "chunk_id": "c5"},
+        {"video_id": "v2", "chunk_id": "c6"},
+    ]
+    # v1 gets c1 + c3 (2 max), then c4/c5 are dropped; v2 gets c2 + c6
+    kept = _apply_per_video_cap(chunks, max_per_video=2)
+    assert [c["chunk_id"] for c in kept] == ["c1", "c2", "c3", "c6"]
+
+
+def test_apply_per_video_cap_large_value_is_noop() -> None:
+    from backend.rag.tools import _apply_per_video_cap
+
+    chunks = [{"video_id": "v1", "chunk_id": f"c{i}"} for i in range(5)]
+    assert _apply_per_video_cap(chunks, max_per_video=999) == chunks
+
+
+# --- Transcript size cap ---------------------------------------------------
+
+
+def test_format_transcript_truncates_when_over_cap() -> None:
+    from backend.rag.tools import _format_transcript
+
+    video = {"title": "Long Video"}
+    chunks = [{"start_seconds": float(i * 30), "content": "x" * 100} for i in range(50)]
+    text = _format_transcript(video, chunks, max_chars=500)
+    assert len(text) <= 800  # cap + truncation marker
+    assert "truncated" in text
+
+
+def test_format_transcript_no_cap_returns_all() -> None:
+    from backend.rag.tools import _format_transcript
+
+    video = {"title": "Short"}
+    chunks = [{"start_seconds": 0.0, "content": "hi"}]
+    text = _format_transcript(video, chunks, max_chars=None)
+    assert "truncated" not in text
+    assert "hi" in text
+
+
+# --- Chunk shape normalization --------------------------------------------
+
+
+def test_normalize_chunk_shape_drops_score() -> None:
+    from backend.rag.tools import _normalize_chunk_shape
+
+    chunk = {
+        "chunk_id": "c1",
+        "content": "x",
+        "video_id": "v1",
+        "video_title": "T",
+        "video_url": "u",
+        "start_seconds": 1.0,
+        "end_seconds": 2.0,
+        "snippet": "x",
+        "score": 0.9,  # hybrid-only field
+    }
+    normalized = _normalize_chunk_shape(chunk)
+    assert "score" not in normalized
+    assert normalized["chunk_id"] == "c1"
+
+
+# --- Embedding memoization -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_embed_query_uses_cache(monkeypatch) -> None:
+    from backend.rag.tools import _embed_query
+
+    calls = {"n": 0}
+
+    def fake_embed(_query):
+        calls["n"] += 1
+        return [0.0] * 1536
+
+    monkeypatch.setattr("backend.rag.embeddings.embed_text", fake_embed)
+    cache: dict[str, list[float]] = {}
+
+    await _embed_query("same query", cache)
+    await _embed_query("same query", cache)
+    await _embed_query("different query", cache)
+
+    assert calls["n"] == 2  # cache hit on the second "same query" call
+
+
 # --- Transcript tool -------------------------------------------------------
 
 

@@ -164,37 +164,44 @@ def _clamp_top_k(value: Any, default: int = 10, maximum: int = 30) -> int:
 
 async def _hydrate_chunks(raw_chunks: list[dict]) -> list[dict]:
     """Enrich raw repository chunks (id, video_id, content, ts...) with video
-    title/url and reshape to the canonical citation-chunk dict."""
+    title/url and reshape to the canonical citation-chunk dict.
+
+    Fetches video metadata for all unique video_ids concurrently to avoid
+    serial DB round-trips when a search spans many videos.
+    """
     if not raw_chunks:
         return []
-    video_cache: dict[str, dict[str, str]] = {}
-    out: list[dict] = []
-    for c in raw_chunks:
-        vid = c.get("video_id", "")
-        if vid and vid not in video_cache:
-            try:
-                video = await repository.get_video(vid)
-            except Exception as exc:
-                logger.warning("hydrate: get_video failed for %s: %s", vid, exc)
-                video = None
-            video_cache[vid] = {
-                "title": video.get("title", "Unknown Video") if video else "Unknown Video",
-                "url": video.get("url", "") if video else "",
-            }
-        meta = video_cache.get(vid, {"title": "Unknown Video", "url": ""})
-        out.append(
-            {
-                "chunk_id": c.get("id", c.get("chunk_id", "")),
-                "content": c.get("content", ""),
-                "video_id": vid,
-                "video_title": meta["title"],
-                "video_url": meta["url"],
-                "start_seconds": c.get("start_seconds", 0.0),
-                "end_seconds": c.get("end_seconds", 0.0),
-                "snippet": c.get("snippet", ""),
-            }
-        )
-    return out
+
+    unique_ids = list({c.get("video_id", "") for c in raw_chunks if c.get("video_id")})
+
+    async def _load(vid: str) -> tuple[str, dict[str, str]]:
+        try:
+            video = await repository.get_video(vid)
+        except Exception as exc:
+            logger.warning("hydrate: get_video failed for %s: %s", vid, exc)
+            video = None
+        return vid, {
+            "title": video.get("title", "Unknown Video") if video else "Unknown Video",
+            "url": video.get("url", "") if video else "",
+        }
+
+    video_cache: dict[str, dict[str, str]] = dict(
+        await asyncio.gather(*(_load(v) for v in unique_ids))
+    )
+
+    return [
+        {
+            "chunk_id": c.get("id", c.get("chunk_id", "")),
+            "content": c.get("content", ""),
+            "video_id": c.get("video_id", ""),
+            "video_title": video_cache.get(c.get("video_id", ""), {}).get("title", "Unknown Video"),
+            "video_url": video_cache.get(c.get("video_id", ""), {}).get("url", ""),
+            "start_seconds": c.get("start_seconds", 0.0),
+            "end_seconds": c.get("end_seconds", 0.0),
+            "snippet": c.get("snippet", ""),
+        }
+        for c in raw_chunks
+    ]
 
 
 def _format_search_results(chunks: list[dict]) -> str:
@@ -210,15 +217,90 @@ def _format_search_results(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def _format_transcript(video: dict, chunks: list[dict]) -> str:
-    title = video.get("title", "Unknown Video")
-    parts = [f"# {title}\n"]
+_CANONICAL_CHUNK_KEYS = (
+    "chunk_id",
+    "content",
+    "video_id",
+    "video_title",
+    "video_url",
+    "start_seconds",
+    "end_seconds",
+    "snippet",
+)
+
+
+def _normalize_chunk_shape(chunk: dict) -> dict:
+    """Project a chunk dict onto the canonical citation shape.
+
+    Different retrieval paths produce slightly different dicts — hybrid
+    retrieval adds an RRF ``score`` that the frontend doesn't use, while
+    hydrate-produced chunks don't have it. Normalizing before the dedup/
+    merge in ``routes/messages.py`` keeps the ``sources`` SSE payload
+    consistent regardless of which tool the model called.
+    """
+    return {
+        key: chunk.get(key, "" if key != "start_seconds" and key != "end_seconds" else 0.0)
+        for key in _CANONICAL_CHUNK_KEYS
+    }
+
+
+def _apply_per_video_cap(chunks: list[dict], max_per_video: int) -> list[dict]:
+    """Limit how many chunks from any single video reach the final context.
+
+    Walks chunks in their input ranking order and drops a chunk once its
+    video has already contributed ``max_per_video`` chunks. Preserves the
+    relative ordering of the chunks that are kept. A very large cap value
+    effectively disables the filter.
+    """
+    if max_per_video <= 0 or not chunks:
+        return chunks
+    from collections import defaultdict
+
+    per_video: dict[str, int] = defaultdict(int)
+    kept: list[dict] = []
     for c in chunks:
+        vid = c.get("video_id", "")
+        if per_video[vid] >= max_per_video:
+            continue
+        kept.append(c)
+        per_video[vid] += 1
+    return kept
+
+
+def _format_transcript(video: dict, chunks: list[dict], max_chars: int | None = None) -> str:
+    """Render chunks as [mm:ss]-annotated transcript.
+
+    If ``max_chars`` is supplied and the rendered transcript would exceed it,
+    truncate at the last complete chunk that fits and append a marker so the
+    LLM knows content was dropped.
+    """
+    title = video.get("title", "Unknown Video")
+    header = f"# {title}\n"
+    parts: list[str] = [header]
+    char_count = len(header)
+    kept_chunks = 0
+    total_chunks = 0
+    for c in chunks:
+        total_chunks += 1
         start = int(c.get("start_seconds") or 0.0)
         mins, secs = divmod(start, 60)
         content = (c.get("content") or "").strip()
-        if content:
-            parts.append(f"[{mins:02d}:{secs:02d}] {content}")
+        if not content:
+            continue
+        piece = f"[{mins:02d}:{secs:02d}] {content}"
+        # Account for the "\n\n" separator we will join with.
+        addition = len(piece) + 2
+        if max_chars is not None and char_count + addition > max_chars:
+            break
+        parts.append(piece)
+        char_count += addition
+        kept_chunks += 1
+    if max_chars is not None and kept_chunks < total_chunks:
+        dropped = total_chunks - kept_chunks
+        parts.append(
+            f"\n[transcript truncated — {dropped} more chunks omitted to stay "
+            f"within the {max_chars}-character cap for tool responses]"
+        )
     return "\n\n".join(parts)
 
 
@@ -227,10 +309,29 @@ def _format_transcript(video: dict, chunks: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def execute_search_hybrid(raw_arguments: str | dict) -> dict[str, Any]:
-    """Hybrid (keyword + semantic via RRF) search."""
-    # Import lazily so test suites that mock these don't need to.
+async def _embed_query(query: str, cache: dict[str, list[float]] | None) -> list[float]:
+    """Embed a query, optionally memoizing the result within a turn.
+
+    The same user turn can issue both ``search_videos`` and
+    ``semantic_search_videos`` on identical query strings — without the
+    cache each call pays an extra OpenRouter embedding round-trip.
+    """
     from backend.rag.embeddings import embed_text
+
+    if cache is not None and query in cache:
+        return cache[query]
+    embedding = await asyncio.to_thread(embed_text, query)
+    if cache is not None:
+        cache[query] = embedding
+    return embedding
+
+
+async def execute_search_hybrid(
+    raw_arguments: str | dict,
+    embedding_cache: dict[str, list[float]] | None = None,
+) -> dict[str, Any]:
+    """Hybrid (keyword + semantic via RRF) search."""
+    from backend.config import RETRIEVAL_MAX_PER_VIDEO
     from backend.rag.retriever_hybrid import retrieve_hybrid
 
     args = _parse_args(raw_arguments)
@@ -242,18 +343,20 @@ async def execute_search_hybrid(raw_arguments: str | dict) -> dict[str, Any]:
     top_k = _clamp_top_k(args.get("top_k"))
 
     try:
-        embedding = await asyncio.to_thread(embed_text, query)
+        embedding = await _embed_query(query, embedding_cache)
         chunks = await retrieve_hybrid(query, embedding, top_k=top_k)
     except Exception as exc:
         logger.warning("search_hybrid failed: %s", exc)
         return {"ok": False, "error": f"search failed: {exc}"}
 
+    chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
+    chunks = [_normalize_chunk_shape(c) for c in chunks]
     return {"ok": True, "text": _format_search_results(chunks), "chunks": chunks}
 
 
 async def execute_search_keyword(raw_arguments: str | dict) -> dict[str, Any]:
     """Keyword-only (tsvector FTS) search."""
-    from backend.config import KEYWORD_LANGUAGE
+    from backend.config import KEYWORD_LANGUAGE, RETRIEVAL_MAX_PER_VIDEO
 
     args = _parse_args(raw_arguments)
     if args is None:
@@ -270,12 +373,16 @@ async def execute_search_keyword(raw_arguments: str | dict) -> dict[str, Any]:
         logger.warning("search_keyword failed: %s", exc)
         return {"ok": False, "error": f"search failed: {exc}"}
 
+    chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     return {"ok": True, "text": _format_search_results(chunks), "chunks": chunks}
 
 
-async def execute_search_semantic(raw_arguments: str | dict) -> dict[str, Any]:
+async def execute_search_semantic(
+    raw_arguments: str | dict,
+    embedding_cache: dict[str, list[float]] | None = None,
+) -> dict[str, Any]:
     """Semantic-only (pgvector cosine) search."""
-    from backend.rag.embeddings import embed_text
+    from backend.config import RETRIEVAL_MAX_PER_VIDEO
 
     args = _parse_args(raw_arguments)
     if args is None:
@@ -286,13 +393,14 @@ async def execute_search_semantic(raw_arguments: str | dict) -> dict[str, Any]:
     top_k = _clamp_top_k(args.get("top_k"))
 
     try:
-        embedding = await asyncio.to_thread(embed_text, query)
+        embedding = await _embed_query(query, embedding_cache)
         raw = await repository.vector_search_pg(embedding, top_k=top_k)
         chunks = await _hydrate_chunks(raw)
     except Exception as exc:
         logger.warning("search_semantic failed: %s", exc)
         return {"ok": False, "error": f"search failed: {exc}"}
 
+    chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     return {"ok": True, "text": _format_search_results(chunks), "chunks": chunks}
 
 
@@ -349,7 +457,13 @@ async def execute_get_video_transcript(
         for c in raw_chunks
     ]
 
-    return {"ok": True, "text": _format_transcript(video, raw_chunks), "chunks": chunks}
+    from backend.config import TRANSCRIPT_TOOL_MAX_CHARS
+
+    return {
+        "ok": True,
+        "text": _format_transcript(video, raw_chunks, max_chars=TRANSCRIPT_TOOL_MAX_CHARS),
+        "chunks": chunks,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -361,15 +475,20 @@ async def execute_tool(
     name: str,
     raw_arguments: str | dict,
     video_id_whitelist: set[str] | None = None,
+    embedding_cache: dict[str, list[float]] | None = None,
 ) -> dict[str, Any]:
     """Dispatch by tool name. Unknown names return an error dict so the
-    model sees the refusal and stops calling."""
+    model sees the refusal and stops calling.
+
+    ``embedding_cache`` is optional per-turn memoization — if the same query
+    text is passed to hybrid and semantic search in one turn, we embed once.
+    """
     if name == "search_videos":
-        return await execute_search_hybrid(raw_arguments)
+        return await execute_search_hybrid(raw_arguments, embedding_cache=embedding_cache)
     if name == "keyword_search_videos":
         return await execute_search_keyword(raw_arguments)
     if name == "semantic_search_videos":
-        return await execute_search_semantic(raw_arguments)
+        return await execute_search_semantic(raw_arguments, embedding_cache=embedding_cache)
     if name == "get_video_transcript":
         return await execute_get_video_transcript(
             raw_arguments, video_id_whitelist=video_id_whitelist
@@ -382,7 +501,3 @@ def serialize_tool_result(result: dict[str, Any]) -> str:
     if result.get("ok"):
         return str(result.get("text", ""))
     return f"Error: {result.get('error') or 'tool execution failed'}"
-
-
-# Backwards-compatible alias for tests that imported the old formatter name.
-_format_timestamped_transcript = _format_transcript

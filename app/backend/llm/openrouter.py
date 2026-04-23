@@ -78,12 +78,21 @@ async def stream_chat(
     tools: list[dict] | None = None,
     tool_executor: ToolExecutor | None = None,
     max_tool_calls: int = 0,
+    final_text_out: list[str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream a chat completion via OpenRouter. When tools + executor are
     supplied, execute tool calls in a loop until finish_reason=stop.
 
     All RAG retrieval is expected to happen via tools; no pre-retrieved
-    context is injected into the system prompt."""
+    context is injected into the system prompt.
+
+    If ``final_text_out`` is supplied, the function appends exactly one
+    string to it: the assistant's text from the *final* round (i.e. the
+    round whose finish_reason was ``stop``, not an intermediate
+    tool_calls round). Callers use this for refusal detection so
+    inter-round commentary like "let me try a different search" does
+    not trigger false positive refusals.
+    """
     client = _get_async_client()
     tools_active = bool(tools) and tool_executor is not None and max_tool_calls > 0
     system_prompt = build_system_prompt(max_tool_calls=max_tool_calls if tools_active else 0)
@@ -100,7 +109,14 @@ async def stream_chat(
     tokens_yielded = 0
     try:
         while True:
-            stream = await client.chat.completions.create(messages=full_messages, **base_kwargs)
+            # Once the per-turn cap has been reached, stop declaring tools on
+            # subsequent completions so the model can't keep burning round-trips
+            # on tool calls that will all be capped. The final round answers
+            # using whatever context the already-executed tools returned.
+            kwargs = dict(base_kwargs)
+            if tools_active and tool_calls_made >= max_tool_calls:
+                kwargs.pop("tools", None)
+            stream = await client.chat.completions.create(messages=full_messages, **kwargs)
             assistant_text_parts: list[str] = []
             # Tool call deltas arrive as fragments keyed by index; accumulate.
             pending: dict[int, dict[str, Any]] = {}
@@ -173,6 +189,11 @@ async def stream_chat(
                     )
                 continue
 
+            # Final round reached (finish_reason is not tool_calls, or pending/
+            # executor missing). Stash the final-round text for the caller's
+            # refusal check.
+            if final_text_out is not None:
+                final_text_out.append("".join(assistant_text_parts))
             break
 
         yield "data: [DONE]\n\n"

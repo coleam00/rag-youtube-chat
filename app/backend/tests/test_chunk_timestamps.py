@@ -100,7 +100,7 @@ async def test_ingest_from_url_stores_timestamps():
         patch(
             "backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock
         ) as mock_create_chunk,
-        patch("backend.routes.ingest.retriever.invalidate_cache"),
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
@@ -174,7 +174,7 @@ async def test_ingest_from_url_fallback_stores_timestamps_when_no_segments():
         patch(
             "backend.routes.ingest.repository.create_chunk", new_callable=AsyncMock
         ) as mock_create_chunk,
-        patch("backend.routes.ingest.retriever.invalidate_cache"),
+        patch("backend.routes.ingest.retriever_hybrid.invalidate_cache"),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post(
@@ -288,7 +288,7 @@ async def test_channel_sync_force_replaces_chunks_on_existing_video():
             new_callable=AsyncMock,
         ) as mock_replace_chunks,
         patch("backend.services.supadata._get_client") as mock_get_client,
-        patch("backend.rag.retriever.invalidate_cache"),
+        patch("backend.rag.retriever_hybrid.invalidate_cache"),
     ):
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = lambda *args, **kwargs: MockChannelVideosResult(
@@ -381,7 +381,7 @@ async def test_channel_sync_without_force_still_skips_existing_video():
             new_callable=AsyncMock,
         ) as mock_replace_chunks,
         patch("backend.services.supadata._get_client") as mock_get_client,
-        patch("backend.rag.retriever.invalidate_cache"),
+        patch("backend.rag.retriever_hybrid.invalidate_cache"),
     ):
         mock_client = AsyncMock()
         mock_client.youtube.channel.videos = lambda *args, **kwargs: MockChannelVideosResult(
