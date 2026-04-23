@@ -67,7 +67,7 @@ if not ADMIN_USER_EMAIL:
 
 OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 EMBEDDING_MODEL: str = "openai/text-embedding-3-small"
-CHAT_MODEL: str = "anthropic/claude-sonnet-4.6"
+CHAT_MODEL: str = "moonshotai/kimi-k2.6"
 
 # Postgres — required for all data (chat + auth). The app fails fast without it.
 # In prod, docker-compose injects DATABASE_URL from the POSTGRES_* vars.
@@ -120,6 +120,21 @@ LLM_TOOLS_ENABLED: bool = os.environ.get("LLM_TOOLS_ENABLED", "true").strip().lo
     "on",
 )
 LLM_TOOLS_MAX_PER_TURN: int = int(os.environ.get("LLM_TOOLS_MAX_PER_TURN", "6"))
+
+# Prompt-caching: inject a video catalog block into the system prompt so
+# Anthropic can cache the static content between requests.  Opt-in because
+# the catalog adds tokens (even on cache hits the input tokens are counted).
+CATALOG_ENABLED: bool = os.environ.get("CATALOG_ENABLED", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+CATALOG_TIER: str = (
+    os.environ.get("CATALOG_TIER", "standard").strip().lower()
+)  # "standard" or "extended"
+# TTL in seconds for the extended prompt-cache tier (Anthropic API requires an integer).
+CATALOG_CACHE_TTL_SECONDS: int = int(os.environ.get("CATALOG_CACHE_TTL_SECONDS", "3600"))
 
 # Cap on how many characters the get_video_transcript tool returns to the
 # model. Long videos can produce 40K+ tokens of transcript; beyond ~30K
