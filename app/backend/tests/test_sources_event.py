@@ -467,6 +467,34 @@ class TestRefusalSourcesSuppression:
         for text in contraction_refusals:
             assert _is_refusal(text) is True, f"Failed on: {text}"
 
+    def test_is_refusal_detects_kimi_refusal_phrases(self) -> None:
+        """Kimi K2.6 refusal phrases that don't match Sonnet patterns.
+
+        After the Sonnet 4.6 → Kimi K2.6 swap (#155), Kimi's refusal phrasing
+        diverged from the original patterns. These phrases appeared in prod
+        refusals but weren't matched by any existing pattern, causing the
+        "Sources (N)" chip to render misleadingly.
+        """
+        from backend.routes.messages import _is_refusal
+
+        kimi_refusals = [
+            # "couldn't find" / "could not find"
+            "I searched through the video library, but I couldn't find an actual recipe for chocolate chip cookies.",
+            # "could not find" (uncontracted)
+            "I could not find any videos about that topic in the library.",
+            # "not an actual" / "no actual"
+            "This is not an actual recipe from the video content.",
+            "There are no actual recipes for chocolate chip cookies in these videos.",
+            # "I searched through" + "but"
+            "I searched through the video library, but I couldn't find what you're looking for.",
+            # "only using them as examples"
+            "The videos that mention 'cookies' are only using them as examples in AI agent demos.",
+            # "check elsewhere"
+            "If you're looking for a recipe, check elsewhere.",
+        ]
+        for text in kimi_refusals:
+            assert _is_refusal(text) is True, f"Failed on Kimi phrase: {text}"
+
 
 class TestExtractTextFromSse:
     """Tests for _extract_text_from_sse helper."""
