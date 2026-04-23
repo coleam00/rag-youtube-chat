@@ -1,0 +1,294 @@
+{
+  "cases": [
+    {
+      "id": "broad_001",
+      "query": "How do I build an AI agent?",
+      "expected_video_ids": ["AgntBld001a"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_002",
+      "query": "What is retrieval-augmented generation?",
+      "expected_video_ids": ["RAGExplain2"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_003",
+      "query": "When should I fine-tune vs prompt engineer?",
+      "expected_video_ids": ["FineVsPrm03"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_004",
+      "query": "What are vector databases and how do they work?",
+      "expected_video_ids": ["VectorDBs04"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_005",
+      "query": "How do I build a coding assistant?",
+      "expected_video_ids": ["CodingAst05"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_006",
+      "query": "What is the future of LLM tooling?",
+      "expected_video_ids": ["LLMToolng06"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_007",
+      "query": "What are the best practices for prompt engineering?",
+      "expected_video_ids": ["PromptEng07"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_008",
+      "query": "How do I evaluate AI outputs?",
+      "expected_video_ids": ["AIEvalMtr08"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_009",
+      "query": "How do I run LLMs locally?",
+      "expected_video_ids": ["LocalLLMsG9"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "broad_010",
+      "query": "How do I build production RAG pipelines?",
+      "expected_video_ids": ["ProdRagPip1"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "cross_001",
+      "query": "How do autonomous agents work and how do you evaluate them?",
+      "expected_video_ids": ["AgntBld001a", "AIEvalMtr08"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_002",
+      "query": "Compare fine-tuning versus retrieval augmentation approaches for production AI systems",
+      "expected_video_ids": ["FineVsPrm03", "RAGExplain2", "ProdRagPip1"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_003",
+      "query": "What tools and frameworks exist for building AI products in 2024?",
+      "expected_video_ids": ["LLMToolng06", "AgntBld001a", "CodingAst05"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_004",
+      "query": "How do vector databases compare and when should I use each option?",
+      "expected_video_ids": ["VectorDBs04", "RAGExplain2"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_005",
+      "query": "What are the key metrics for measuring AI system quality?",
+      "expected_video_ids": ["AIEvalMtr08", "ProdRagPip1"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_006",
+      "query": "How do I optimize LLM applications for production at scale?",
+      "expected_video_ids": ["ProdRagPip1", "RAGExplain2", "PromptEng07"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_007",
+      "query": "What's the difference between local and cloud LLMs and when should I use each?",
+      "expected_video_ids": ["LocalLLMsG9", "LLMToolng06"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_008",
+      "query": "How do you build a retrieval system that combines keyword and semantic search?",
+      "expected_video_ids": ["RAGExplain2", "VectorDBs04", "ProdRagPip1"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_009",
+      "query": "What strategies improve RAG retrieval quality in production deployments?",
+      "expected_video_ids": ["ProdRagPip1", "RAGExplain2"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "cross_010",
+      "query": "How do I build an agent with memory, tools, and planning capabilities?",
+      "expected_video_ids": ["AgntBld001a", "CodingAst05"],
+      "category": "broad_cross_video"
+    },
+    {
+      "id": "follow_001",
+      "query": "How would I improve that approach?",
+      "history": [
+        "What is RAG?",
+        "RAG combines retrieval with generation to ground LLMs in real data.",
+        "How does chunking affect retrieval quality?"
+      ],
+      "expected_video_ids": ["RAGExplain2", "ProdRagPip1"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_002",
+      "query": "Which framework should I use for that?",
+      "history": [
+        "How do I build a coding assistant?",
+        "Build one using retrieval over your codebase with an LLM for generation.",
+        "What embedding model works best for code?"
+      ],
+      "expected_video_ids": ["CodingAst05"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_003",
+      "query": "How does that compare to fine-tuning?",
+      "history": [
+        "How do I handle errors in agent loops?",
+        "Agents should retry, fall back, or ask for clarification when tool calls fail.",
+        "What about planning failures?"
+      ],
+      "expected_video_ids": ["AgntBld001a", "FineVsPrm03"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_004",
+      "query": "Can I run that locally?",
+      "history": [
+        "How do vector databases enable semantic search?",
+        "Vector databases store embeddings and find similar ones using cosine similarity.",
+        "What hardware do I need for this?"
+      ],
+      "expected_video_ids": ["VectorDBs04", "LocalLLMsG9"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_005",
+      "query": "How do I implement that in production?",
+      "history": [
+        "What is hybrid search?",
+        "Hybrid search combines keyword and vector search using Reciprocal Rank Fusion.",
+        "What's the performance like at scale?"
+      ],
+      "expected_video_ids": ["RAGExplain2", "ProdRagPip1"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_006",
+      "query": "What evaluation metrics should I track for that?",
+      "history": [
+        "How do I build a RAG pipeline?",
+        "Build a RAG pipeline by chunking documents, embedding them, storing in a vector DB, and retrieving relevant chunks at query time.",
+        "How do I know if it's working well?"
+      ],
+      "expected_video_ids": ["AIEvalMtr08", "ProdRagPip1"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_007",
+      "query": "What quantization method should I use?",
+      "history": [
+        "How do I run LLMs locally?",
+        "Run LLMs locally using Ollama and GGUF quantized models.",
+        "How much memory do I need for a 13B model?"
+      ],
+      "expected_video_ids": ["LocalLLMsG9"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_008",
+      "query": "Which prompt pattern works best for that?",
+      "history": [
+        "What are the best prompt engineering practices?",
+        "Use clear system prompts, few-shot examples, chain-of-thought reasoning, and explicit format requirements.",
+        "How do I handle edge cases?"
+      ],
+      "expected_video_ids": ["PromptEng07"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_009",
+      "query": "How does this interact with tool use?",
+      "history": [
+        "How do autonomous agents work?",
+        "Agents work by perceiving, thinking, and acting in a loop using tools.",
+        "What kind of tools can agents use?"
+      ],
+      "expected_video_ids": ["AgntBld001a", "LLMToolng06"],
+      "category": "follow_up"
+    },
+    {
+      "id": "follow_010",
+      "query": "What's the benchmark for that?",
+      "history": [
+        "How do I evaluate AI outputs?",
+        "Evaluate AI outputs using automated metrics, LLM-as-judge, and human evaluation.",
+        "Which automated metric is most reliable?"
+      ],
+      "expected_video_ids": ["AIEvalMtr08"],
+      "category": "follow_up"
+    },
+    {
+      "id": "oos_001",
+      "query": "What is the capital of France?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_002",
+      "query": "What is 2 + 2?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_003",
+      "query": "Who won the world series in 2020?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_004",
+      "query": "What is the weather in New York today?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_005",
+      "query": "How do I bake a chocolate cake?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_006",
+      "query": "What are the latest stock prices?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_007",
+      "query": "Who is the president of the United States?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_008",
+      "query": "How do I change a tire on a car?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_009",
+      "query": "What is the meaning of life?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    },
+    {
+      "id": "oos_010",
+      "query": "How do I book a flight to Tokyo?",
+      "expected_video_ids": [],
+      "category": "out_of_scope"
+    }
+  ]
+}
