@@ -28,10 +28,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from backend import rate_limit
 from backend.auth.dependencies import get_current_user
-from backend.config import LLM_TOOLS_ENABLED, LLM_TOOLS_MAX_PER_TURN, RETRIEVAL_EXPANSION_WINDOW
+from backend.config import LLM_TOOLS_ENABLED, LLM_TOOLS_MAX_PER_TURN
 from backend.db import repository
 from backend.llm.openrouter import stream_chat
-from backend.rag.expansion import expand_and_merge
 from backend.rag.tools import TOOL_SCHEMAS, execute_tool, serialize_tool_result
 
 logger = logging.getLogger(__name__)
@@ -173,20 +172,10 @@ async def create_message(
                 # Intercept [DONE] to inject the sources event first.
                 if sse_chunk == "data: [DONE]\n\n":
                     # Merge tool-loaded chunks into source_citations (deduped).
+                    # Expansion now runs inside each rag/tools.py executor
+                    # (after per-video cap), so chunks here are already
+                    # expanded where enabled — no extra call needed.
                     if tool_chunks_acc:
-                        # Expand chunks with neighbors before emitting sources
-                        try:
-                            tool_chunks_acc[:] = await expand_and_merge(
-                                tool_chunks_acc,
-                                window=RETRIEVAL_EXPANSION_WINDOW,
-                            )
-                        except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
-                            # Don't swallow cancellation - propagate it
-                            raise
-                        except Exception as exc:
-                            logger.warning(
-                                "Chunk expansion failed, using unexpanded chunks: %s", exc
-                            )
                         seen: set[str] = set()
                         for tc in tool_chunks_acc:
                             tc_id = tc.get("chunk_id")

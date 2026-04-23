@@ -187,7 +187,8 @@ class _FakeNeighbors:
 
     async def __call__(self, video_id: str, chunk_index: int, window: int = 1) -> list[dict]:
         if self._side_effect:
-            return await self._side_effect(video_id, chunk_index, window)
+            result: list[dict] = await self._side_effect(video_id, chunk_index, window)
+            return result
         return []
 
     @property

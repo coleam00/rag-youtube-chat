@@ -773,13 +773,21 @@ class TestChunkExpansionIntegration:
             }
         ]
 
-        async def mock_stream_chat(messages, tools=None, tool_executor=None, max_tool_calls=0):
+        async def mock_stream_chat(
+            messages,
+            tools=None,
+            tool_executor=None,
+            max_tool_calls=0,
+            final_text_out=None,
+        ):
             if tool_executor is not None:
                 await tool_executor("search_videos", json.dumps({"query": "test"}))
             yield answer_chunk
+            if final_text_out is not None:
+                final_text_out.append("The video explains it works.")
             yield done_chunk
 
-        async def mock_execute_tool(name, raw_args, video_id_whitelist=None):
+        async def mock_execute_tool(name, raw_args, video_id_whitelist=None, embedding_cache=None):
             return {"ok": True, "text": "context", "chunks": source_citations}
 
         from uuid import uuid4

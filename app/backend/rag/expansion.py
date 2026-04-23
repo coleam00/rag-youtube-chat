@@ -48,10 +48,14 @@ async def expand_and_merge(
     if _fetch_neighbors is None:
         _fetch_neighbors = repository.get_chunk_neighbors
 
-    # Build index: chunk_index -> original retrieved chunk (for citation anchoring)
-    retrieved_by_index: dict[int, dict] = {}
+    # Build index: (video_id, chunk_index) -> original retrieved chunk (for
+    # citation anchoring). Keying by tuple prevents chunks at the same
+    # chunk_index across different videos from shadowing each other — a
+    # chunk_index-only key would pick the wrong anchor when neighbors from
+    # video A collide with originals from video B at the same index.
+    retrieved_by_index: dict[tuple[str, int], dict] = {}
     for c in chunks:
-        retrieved_by_index[c["chunk_index"]] = c
+        retrieved_by_index[(c["video_id"], c["chunk_index"])] = c
 
     # Fetch neighbors for all chunks concurrently
     video_groups: dict[str, list[dict]] = defaultdict(list)
@@ -81,7 +85,7 @@ async def expand_and_merge(
         by_video[c["video_id"]].append(c)
 
     merged: list[dict] = []
-    for _video_id, video_chunks in by_video.items():
+    for current_video_id, video_chunks in by_video.items():
         # Dedupe by chunk id
         seen: set[str] = set()
         unique_chunks: list[dict] = []
@@ -113,7 +117,7 @@ async def expand_and_merge(
             # Find the first originally-retrieved chunk in this raw span
             anchor = raw[0]
             for c in raw:
-                if c["chunk_index"] in retrieved_by_index:
+                if (current_video_id, c["chunk_index"]) in retrieved_by_index:
                     anchor = c
                     break
 
