@@ -24,6 +24,7 @@ from backend.rag.chunker import chunk_video_fallback, chunk_video_timestamped
 from backend.rag.embeddings import embed_batch
 from backend.services import supadata
 from backend.services.video_ingest import fetch_video_for_ingest
+from backend.services.youtube_meta import get_video_title
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,15 @@ async def sync_channel(limit: int | None = None, force: bool = False) -> SyncRes
             supadata_data.get("description") or f"Synced from channel {YOUTUBE_CHANNEL_ID}"
         )
 
+        # Fetch channel title from oEmbed for human-readable attribution
+        _dbg_video_title, channel_title = await get_video_title(youtube_video_id)
+        if channel_title is None:
+            logger.warning(
+                "oEmbed channel title unavailable for video %s (channel %s)",
+                youtube_video_id,
+                YOUTUBE_CHANNEL_ID,
+            )
+
         # Ingest through chunk → embed → store pipeline.
         # When force=True and the video already exists, reuse its row and
         # replace its chunks in a single transaction below; otherwise create
@@ -212,6 +222,8 @@ async def sync_channel(limit: int | None = None, force: bool = False) -> SyncRes
                     description=description,
                     url=youtube_url,
                     transcript=transcript,
+                    channel_id=YOUTUBE_CHANNEL_ID,
+                    channel_title=channel_title,
                 )
             except Exception as exc:
                 logger.error(

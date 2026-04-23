@@ -29,6 +29,8 @@ export interface Video {
   description: string;
   url: string;
   created_at: string;
+  channel_id?: string;
+  channel_title?: string;
 }
 
 export interface Conversation {

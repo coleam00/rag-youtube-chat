@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { BrandingHeader } from '../components/BrandingHeader';
 import { useAuth } from '../hooks/useAuth';
 import { AuthError } from '../lib/authApi';
 
@@ -41,6 +42,7 @@ export function Signup() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] text-[var(--text-primary)] p-4">
+      <BrandingHeader />
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm bg-[var(--surface-1)] border border-[var(--border)] rounded-lg p-6 space-y-4"

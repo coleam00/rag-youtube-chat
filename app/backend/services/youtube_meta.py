@@ -54,8 +54,8 @@ async def _fetch_og_description(video_id: str) -> str | None:
         return None
 
 
-async def get_video_title(video_id: str) -> str | None:
-    """Return the YouTube video title, or None if the lookup fails.
+async def get_video_title(video_id: str) -> tuple[str | None, str | None]:
+    """Return the (video_title, channel_title) from YouTube oEmbed, or (None, None) on failure.
 
     Never raises — a missing title falls back to the caller's placeholder.
     """
@@ -68,23 +68,25 @@ async def get_video_title(video_id: str) -> str | None:
             resp = await client.get(_OEMBED_URL, params=params)
             if resp.status_code != 200:
                 logger.warning("oEmbed %s for %s: %s", resp.status_code, video_id, resp.text[:200])
-                return None
-            title = resp.json().get("title")
-            return str(title) if title else None
+                return None, None
+            data = resp.json()
+            title = data.get("title")
+            author = data.get("author_name")
+            return (str(title) if title else None, str(author) if author else None)
     except asyncio.CancelledError:
         raise
     except httpx.TimeoutException as exc:
         logger.warning("oEmbed timeout for %s: %s", video_id, exc)
-        return None
+        return None, None
     except httpx.HTTPStatusError as exc:
         logger.warning("oEmbed HTTP error %s for %s: %s", exc.response.status_code, video_id, exc)
-        return None
+        return None, None
     except httpx.NetworkError as exc:
         logger.warning("oEmbed network error for %s: %s", video_id, exc)
-        return None
+        return None, None
     except Exception as exc:
         logger.warning("oEmbed title fetch failed for %s: %s", video_id, exc)
-        return None
+        return None, None
 
 
 async def get_video_description(video_id: str) -> str | None:

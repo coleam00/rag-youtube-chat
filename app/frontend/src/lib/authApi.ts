@@ -57,15 +57,13 @@ export class AuthError extends Error {
 function formatDetail(detail: unknown): string | null {
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail)) {
-    const parts = detail
-      .map((d) => {
-        if (d && typeof d === 'object' && 'msg' in d && typeof (d as { msg: unknown }).msg === 'string') {
-          return (d as { msg: string }).msg;
-        }
-        return null;
-      })
-      .filter((p): p is string => p !== null);
-    return parts.length > 0 ? parts.join(', ') : null;
+    const msgs = detail
+      .filter(
+        (d): d is { msg: string } =>
+          typeof d === 'object' && d !== null && 'msg' in d && typeof d.msg === 'string',
+      )
+      .map((d) => d.msg);
+    return msgs.length > 0 ? msgs.join(', ') : null;
   }
   return null;
 }
@@ -111,4 +109,17 @@ export const login = (email: string, password: string) =>
 
 export const logout = () => authRequest<void>('/logout', { method: 'POST' });
 
-export const me = () => authRequest<AuthMeResponse>('/me', { method: 'GET' });
+// In-flight `me()` promise. Multiple concurrent callers (e.g. an AuthProvider
+// that re-renders during mount, or a component that calls refresh() before
+// the first fetch has settled) share the same request instead of fanning out.
+// Cleared on settle so the next mount-cycle or post-login refresh gets a fresh
+// hit. Regression guard for issue #115 — seven /api/auth/me calls on signup.
+let _meInFlight: Promise<AuthMeResponse> | null = null;
+
+export const me = (): Promise<AuthMeResponse> => {
+  if (_meInFlight) return _meInFlight;
+  _meInFlight = authRequest<AuthMeResponse>('/me', { method: 'GET' }).finally(() => {
+    _meInFlight = null;
+  });
+  return _meInFlight;
+};

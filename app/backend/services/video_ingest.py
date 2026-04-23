@@ -91,7 +91,7 @@ async def fetch_video_for_ingest(url: str, lang: str = "en") -> dict[str, Any]:
         transcript = " ".join(parts)
     # else: transcript stays "" and segments stays []
 
-    fetched_title = await get_video_title(parsed.video_id)
+    fetched_title, _ = await get_video_title(parsed.video_id)
     title = fetched_title or f"Video {parsed.video_id}"
 
     # Fetch real description from YouTube Data API; fall back to placeholder if unavailable

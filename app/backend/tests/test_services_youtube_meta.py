@@ -253,3 +253,138 @@ class TestGetVideoDescription:
             result = await get_video_description("privvideo123")
 
         assert result is None
+
+
+class TestGetVideoTitle:
+    """Tests for get_video_title()."""
+
+    @pytest.mark.asyncio
+    async def test_returns_tuple_with_title_and_author(self):
+        """oEmbed returns both title and author_name → return (title, channel_title)."""
+        mock_response = {"title": "My Video Title", "author_name": "My Channel"}
+
+        async def fake_get(*args, **kwargs):
+            class FakeResp:
+                status_code = 200
+
+                def json(self):
+                    return mock_response
+
+            return FakeResp()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == ("My Video Title", "My Channel")
+
+    @pytest.mark.asyncio
+    async def test_returns_title_only_when_author_missing(self):
+        """oEmbed returns title but no author_name → channel_title is None."""
+        mock_response = {"title": "My Video Title"}
+
+        async def fake_get(*args, **kwargs):
+            class FakeResp:
+                status_code = 200
+
+                def json(self):
+                    return mock_response
+
+            return FakeResp()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == ("My Video Title", None)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_tuple_when_neither_present(self):
+        """oEmbed returns empty response → (None, None)."""
+        mock_response = {}
+
+        async def fake_get(*args, **kwargs):
+            class FakeResp:
+                status_code = 200
+
+                def json(self):
+                    return mock_response
+
+            return FakeResp()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == (None, None)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_tuple_on_404(self):
+        """oEmbed returns 404 → (None, None)."""
+        async def fake_get(*args, **kwargs):
+            class FakeResp:
+                status_code = 404
+
+                @property
+                def text(self):
+                    return "Video not found"
+
+            return FakeResp()
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == (None, None)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_tuple_on_timeout(self):
+        """oEmbed timeout → (None, None)."""
+        import httpx
+
+        async def fake_get(*args, **kwargs):
+            raise httpx.TimeoutException("Connection timed out")
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == (None, None)
+
+    @pytest.mark.asyncio
+    async def test_returns_none_tuple_on_network_error(self):
+        """oEmbed network error → (None, None)."""
+        import httpx
+
+        async def fake_get(*args, **kwargs):
+            raise httpx.NetworkError("Connection failed")
+
+        with patch("httpx.AsyncClient") as mock_client:
+            instance = mock_client.return_value.__aenter__.return_value
+            instance.get = AsyncMock(side_effect=fake_get)
+
+            from backend.services.youtube_meta import get_video_title
+
+            result = await get_video_title("abc123xyz")
+
+        assert result == (None, None)

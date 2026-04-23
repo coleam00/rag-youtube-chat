@@ -180,7 +180,9 @@ async def serve_spa_or_static(path: str):
             if requested_path.is_file():
                 return FileResponse(str(requested_path))
         except OSError as exc:
-            logger.error("Static file error for path=%s frontend_dist=%s: %s", path, FRONTEND_DIST, exc)
+            logger.error(
+                "Static file error for path=%s frontend_dist=%s: %s", path, FRONTEND_DIST, exc
+            )
             raise HTTPException(status_code=500, detail="Static file error") from exc
 
     index_path = Path(FRONTEND_DIST) / "index.html" if FRONTEND_DIST else Path("index.html")

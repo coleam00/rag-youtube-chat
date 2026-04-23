@@ -62,10 +62,10 @@ interface EmptyStateProps {
 
 function EmptyState({ onStarterClick }: EmptyStateProps) {
   const starters = [
-    'How do RAG pipelines work?',
-    'What are the best prompt engineering practices?',
-    'Explain vector databases and embeddings',
-    'What is the difference between fine-tuning and prompting?',
+    'How do I use subagents in Claude Code?',
+    'How should I structure an agent team?',
+    "How does Cole's complete agentic coding workflow look end-to-end?",
+    'How do I turn Claude Code into an engineering team?',
   ];
 
   return (
