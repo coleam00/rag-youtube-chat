@@ -1,10 +1,9 @@
-"""
-Pin the RAG system prompt's "no raw IDs in prose" rule (issue #93).
+"""Regression tests for the RAG system prompt.
 
-The LLM was emitting `(Source: Video <11-char-id>)` inline in responses;
-source chips already render that info below the message. We added an
-explicit instruction to suppress it — if someone rewrites the prompt and
-drops the rule, these tests fail so the regression is caught in CI.
+Pin two behaviors the factory rules care about:
+  1. The prompt forbids raw ids in the assistant's prose (issue #93).
+  2. The prompt no longer injects pre-retrieved context — retrieval is
+     entirely tool-driven now — and it tells the model to use its tools.
 """
 
 from __future__ import annotations
@@ -18,12 +17,29 @@ class TestSystemPromptForbidsRawIds:
         assert "title only" in SYSTEM_PROMPT_TEMPLATE.lower()
 
     def test_built_prompt_contains_rule(self) -> None:
-        prompt = build_system_prompt(context="[Source: Some Video at 00:10]\nSome transcript.")
-        lowered = prompt.lower()
-        assert "never write youtube video ids" in lowered
-        assert "title only" in lowered
+        prompt = build_system_prompt(max_tool_calls=6).lower()
+        assert "never write youtube video ids" in prompt
+        assert "title only" in prompt
 
-    def test_built_prompt_still_injects_context(self) -> None:
-        ctx = "[Source: Claude Code Walkthrough at 01:23]\nHello world."
-        prompt = build_system_prompt(context=ctx)
-        assert ctx in prompt
+
+class TestSystemPromptToolBased:
+    def test_prompt_has_no_context_placeholder(self) -> None:
+        # Retrieval is tool-driven; no pre-retrieved context is injected.
+        prompt = build_system_prompt(max_tool_calls=0)
+        assert "{context}" not in prompt
+        assert "Context:" not in prompt
+
+    def test_prompt_mentions_all_tools_when_enabled(self) -> None:
+        prompt = build_system_prompt(max_tool_calls=6)
+        for tool_name in (
+            "search_videos",
+            "keyword_search_videos",
+            "semantic_search_videos",
+            "get_video_transcript",
+        ):
+            assert tool_name in prompt
+        assert "6 tool calls" in prompt or "6 " in prompt  # cap echoed in guidance
+
+    def test_prompt_omits_tool_guidance_when_cap_zero(self) -> None:
+        prompt = build_system_prompt(max_tool_calls=0)
+        assert "search_videos" not in prompt

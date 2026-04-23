@@ -101,18 +101,19 @@ HYBRID_K_CONSTANT: int = 60
 HYBRID_OVERFETCH_FACTOR: int = 2
 KEYWORD_LANGUAGE: str = "english"
 
-# Full-transcript tool — lets the LLM read an entire video's transcript when
-# retrieved chunks are insufficient. Disabled rolls back to pure chunk-based
-# retrieval. Per-turn cap protects OpenRouter budget from runaway tool calls.
-TRANSCRIPT_TOOL_ENABLED: bool = os.environ.get(
-    "TRANSCRIPT_TOOL_ENABLED", "true"
-).strip().lower() in (
+# RAG tool-based retrieval — the LLM drives retrieval via tool calls
+# (search_videos, keyword_search_videos, semantic_search_videos,
+# get_video_transcript) rather than receiving pre-retrieved chunks. Disabled
+# falls back to a tools-off LLM call with no context (model answers from
+# training or refuses) — useful only for diagnostic rollback. Per-turn cap
+# protects the OpenRouter budget from runaway loops.
+LLM_TOOLS_ENABLED: bool = os.environ.get("LLM_TOOLS_ENABLED", "true").strip().lower() in (
     "1",
     "true",
     "yes",
     "on",
 )
-TRANSCRIPT_TOOL_MAX_PER_TURN: int = int(os.environ.get("TRANSCRIPT_TOOL_MAX_PER_TURN", "2"))
+LLM_TOOLS_MAX_PER_TURN: int = int(os.environ.get("LLM_TOOLS_MAX_PER_TURN", "6"))
 
 # YouTube channel to sync from (used by POST /api/channels/sync)
 YOUTUBE_CHANNEL_ID: str = os.environ.get("YOUTUBE_CHANNEL_ID", "")

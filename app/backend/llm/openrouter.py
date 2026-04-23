@@ -33,37 +33,39 @@ def _get_async_client() -> AsyncOpenAI:
     return _async_client
 
 
+_BASE_SYSTEM_PROMPT = """\
+You are a helpful assistant with access to transcripts from a YouTube creator's video library. You answer questions by retrieving grounded content from that library via the tools below.
+
+When you reference a video, use its title only. Never write YouTube video IDs, chunk IDs, or raw source identifiers in your prose — the UI renders sources separately as clickable chips, so inline tokens like "(Source: Video HAkSUBdsd6M)" are redundant clutter.
+
+Answer based ONLY on content you retrieved via your tools. If your searches return no relevant material, say so honestly — do not invent content."""
+
+
 _TOOL_GUIDANCE = """\
 
-You have access to a tool `get_video_transcript(video_id)` that returns the full timestamped transcript of one video from the library.
+You have four retrieval tools. You MUST call at least one before answering any question about the library content:
 
-Call the tool when:
-- The context above does not contain enough information to answer the user's question
-- The user is asking about a specific video that the retrieved chunks do not cover in full
-- A complete answer requires the arc of a whole video rather than isolated chunks
+- `search_videos(query, top_k=10)` — hybrid search (keyword + semantic via RRF). Your default. Start here.
+- `keyword_search_videos(query, top_k=10)` — exact-term matching (tsvector FTS). Best for proper nouns, acronyms, literal phrases.
+- `semantic_search_videos(query, top_k=10)` — conceptual similarity (vector cosine). Best when the user's wording may not match transcripts literally.
+- `get_video_transcript(video_id)` — full timestamped transcript of one video. Call only after a search surfaced a video and you need its full arc. Expensive — use sparingly.
 
-Do not call the tool when:
-- The retrieved context already covers the question
-- The question is a simple factual lookup
-
-You may call this tool at most {max_per_turn} times per user turn. Valid video_ids are only those shown in the source citations of the retrieved context above (or in the catalog if one is present)."""
-
-
-SYSTEM_PROMPT_TEMPLATE = """\
-You are a helpful assistant with access to transcripts from a YouTube creator's video library.
-Answer the user's question based ONLY on the provided video context. If the answer isn't in the context, say so honestly.
-When you reference a video, use its title only. Never write YouTube video IDs, chunk IDs, or other raw source identifiers in your response — the UI renders sources separately as clickable chips, so inline tokens like "(Source: Video HAkSUBdsd6M)" or "(Video 60G93MXT4DI)" are redundant clutter. Your prose should read naturally, as if the source list below were invisible.
-
-Context:
-{context}"""
+Strategy:
+- Default to `search_videos` unless the question clearly calls for keyword or semantic specifically.
+- If the first call returns insufficient or irrelevant context, issue another with a better query or a different strategy.
+- Reach for `get_video_transcript` only when chunk-level results are clearly not enough.
+- You have {max_per_turn} tool calls total per user turn. Spend them deliberately."""
 
 
-def build_system_prompt(context: str, tool_guidance_max_per_turn: int | None = None) -> str:
+SYSTEM_PROMPT_TEMPLATE = _BASE_SYSTEM_PROMPT
+
+
+def build_system_prompt(max_tool_calls: int = 0) -> str:
     """Build the system prompt. Appends tool-use guidance when a positive cap
-    is supplied; omits it otherwise."""
-    prompt = SYSTEM_PROMPT_TEMPLATE.format(context=context)
-    if tool_guidance_max_per_turn is not None and tool_guidance_max_per_turn > 0:
-        prompt += _TOOL_GUIDANCE.format(max_per_turn=tool_guidance_max_per_turn)
+    is supplied; returns just the base prompt otherwise (diagnostic rollback)."""
+    prompt = _BASE_SYSTEM_PROMPT
+    if max_tool_calls > 0:
+        prompt += _TOOL_GUIDANCE.format(max_per_turn=max_tool_calls)
     return prompt
 
 
@@ -73,18 +75,18 @@ ToolExecutor = Callable[[str, str], Awaitable[str]]
 
 async def stream_chat(
     messages: list[dict],
-    context: str = "",
     tools: list[dict] | None = None,
     tool_executor: ToolExecutor | None = None,
     max_tool_calls: int = 0,
 ) -> AsyncGenerator[str, None]:
     """Stream a chat completion via OpenRouter. When tools + executor are
-    supplied, execute tool calls in a loop until finish_reason=stop."""
+    supplied, execute tool calls in a loop until finish_reason=stop.
+
+    All RAG retrieval is expected to happen via tools; no pre-retrieved
+    context is injected into the system prompt."""
     client = _get_async_client()
     tools_active = bool(tools) and tool_executor is not None and max_tool_calls > 0
-    system_prompt = build_system_prompt(
-        context, tool_guidance_max_per_turn=max_tool_calls if tools_active else None
-    )
+    system_prompt = build_system_prompt(max_tool_calls=max_tool_calls if tools_active else 0)
 
     full_messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": system_prompt},

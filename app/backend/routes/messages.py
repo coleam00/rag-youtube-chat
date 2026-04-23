@@ -1,20 +1,21 @@
 """
 Message routes — POST /api/conversations/{conv_id}/messages
 
-Orchestrates the full RAG pipeline:
+Orchestrates the tool-driven RAG flow:
   1. Verify conversation ownership (404 cross-user, no leak)
-  2. Save user message
-  3. Embed the query
-  4. Retrieve top-K relevant chunks
-  5. Build prompt with context
-  6. Stream LLM response as SSE
-  7. Send sources event before [DONE]
-  8. Persist assistant message after stream completes
+  2. Enforce 25 msg/user/24h cap
+  3. Save user message
+  4. Load conversation history
+  5. Invoke the LLM with retrieval tools declared; the model drives
+     retrieval via tool calls (search_videos, keyword_search_videos,
+     semantic_search_videos, get_video_transcript). No pre-retrieval.
+  6. Stream the response as SSE
+  7. Send the sources event (populated from the model's tool calls) before [DONE]
+  8. Persist the assistant message after the stream completes
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -26,11 +27,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from backend import rate_limit
 from backend.auth.dependencies import get_current_user
-from backend.config import TRANSCRIPT_TOOL_ENABLED, TRANSCRIPT_TOOL_MAX_PER_TURN
+from backend.config import LLM_TOOLS_ENABLED, LLM_TOOLS_MAX_PER_TURN
 from backend.db import repository
 from backend.llm.openrouter import stream_chat
-from backend.rag.embeddings import embed_text
-from backend.rag.retriever_hybrid import retrieve_hybrid
 from backend.rag.tools import TOOL_SCHEMAS, execute_tool, serialize_tool_result
 
 logger = logging.getLogger(__name__)
@@ -112,95 +111,62 @@ async def create_message(
     all_messages = await repository.list_messages(conv_id, user_id=user_id)
     llm_messages = [{"role": m["role"], "content": m["content"]} for m in all_messages]
 
-    # 5. Embed the user query and retrieve relevant chunks
-    context = ""
-    chunks: list[dict] = []
-    retrieval_failed = False
-    try:
-        query_embedding = await asyncio.to_thread(embed_text, user_content)
-        chunks = await retrieve_hybrid(user_content, query_embedding, top_k=5)
-        if chunks:
-            context = _format_context(chunks)
-    except asyncio.CancelledError:
-        raise  # Must propagate to FastAPI for proper cancellation handling
-    except Exception as exc:
-        logger.warning("RAG retrieval failed (continuing without context): %s", exc)
-        retrieval_failed = True
-
-    # Build citation objects for the SSE sources event
-    source_citations: list[dict] = [
-        {
-            "chunk_id": c.get("chunk_id", ""),
-            "video_id": c.get("video_id", ""),
-            "video_title": c.get("video_title", ""),
-            "video_url": c.get("video_url", ""),
-            "start_seconds": c.get("start_seconds", 0.0),
-            "end_seconds": c.get("end_seconds", 0.0),
-            "snippet": c.get("snippet", ""),
-        }
-        for c in chunks
-        if c.get("chunk_id")
-    ]
-
-    # Attach retrieval status to citations so frontend can warn user
-    if retrieval_failed:
-        for citation in source_citations:
-            citation["retrieval_failed"] = True
-
-    # 6a. Prepare tool-use plumbing. The executor is a closure that mutates
-    # tool_chunks_acc so the outer handler can merge tool-loaded chunks into
-    # source_citations once streaming finishes. The whitelist prevents the
-    # model from requesting ids that aren't actually in the library.
+    # 5. Set up tool plumbing. All retrieval happens inside the LLM loop via
+    # tool calls — no pre-retrieval runs here. The executor closure collects
+    # every chunk returned by any tool call so the final SSE `sources` event
+    # lists exactly what the model actually read. The video_id whitelist is
+    # only consulted by the transcript tool (it guards against hallucinated
+    # ids); the search tools ignore it.
+    source_citations: list[dict] = []
     tool_chunks_acc: list[dict] = []
     tools_param: list[dict] | None = None
     executor = None
     max_tool_calls = 0
-    if TRANSCRIPT_TOOL_ENABLED:
+    if LLM_TOOLS_ENABLED:
         try:
             all_videos = await repository.list_videos()
             video_id_whitelist: set[str] = {v["id"] for v in all_videos if v.get("id")}
         except Exception as exc:
             logger.warning(
-                "Failed to load video whitelist for transcript tool; disabling tool for this turn: %s",
+                "Failed to load video whitelist for tool use; transcript tool calls will be unguarded: %s",
                 exc,
             )
             video_id_whitelist = set()
-        if video_id_whitelist:
 
-            async def _executor(name: str, raw_args: str) -> str:
-                result = await execute_tool(name, raw_args, video_id_whitelist=video_id_whitelist)
-                if result.get("ok") and result.get("chunks"):
-                    tool_chunks_acc.extend(result["chunks"])
-                return serialize_tool_result(result)
+        async def _executor(name: str, raw_args: str) -> str:
+            # Pass `None` (not empty set) when the whitelist failed to load so
+            # the transcript tool falls back to open lookups instead of rejecting
+            # every id.
+            whitelist = video_id_whitelist if video_id_whitelist else None
+            result = await execute_tool(name, raw_args, video_id_whitelist=whitelist)
+            if result.get("ok") and result.get("chunks"):
+                tool_chunks_acc.extend(result["chunks"])
+            return serialize_tool_result(result)
 
-            tools_param = TOOL_SCHEMAS
-            executor = _executor
-            max_tool_calls = TRANSCRIPT_TOOL_MAX_PER_TURN
+        tools_param = TOOL_SCHEMAS
+        executor = _executor
+        max_tool_calls = LLM_TOOLS_MAX_PER_TURN
 
-    # 6b. Stream the response
+    # 6. Stream the response. The model drives retrieval via tool calls;
+    # chunks it pulls flow into source_citations via tool_chunks_acc.
     async def event_generator() -> AsyncGenerator[str, None]:
         full_response = []
         try:
             async for sse_chunk in stream_chat(
                 llm_messages,
-                context=context,
                 tools=tools_param,
                 tool_executor=executor,
                 max_tool_calls=max_tool_calls,
             ):
-                # Intercept [DONE] to inject the sources event first. Merge
-                # any chunks the model loaded via tool calls into
-                # source_citations so citation chips include them.
+                # Intercept [DONE] to inject the sources event first.
                 if sse_chunk == "data: [DONE]\n\n":
                     if tool_chunks_acc:
-                        existing_ids = {
-                            c.get("chunk_id") for c in source_citations if c.get("chunk_id")
-                        }
+                        seen: set[str] = set()
                         for tc in tool_chunks_acc:
                             tc_id = tc.get("chunk_id")
-                            if tc_id and tc_id not in existing_ids:
+                            if tc_id and tc_id not in seen:
                                 source_citations.append(tc)
-                                existing_ids.add(tc_id)
+                                seen.add(tc_id)
                     if source_citations:
                         sources_json = json.dumps(source_citations)
                         yield f"event: sources\ndata: {sources_json}\n\n"
@@ -234,20 +200,6 @@ async def create_message(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _format_context(chunks: list[dict]) -> str:
-    """Format retrieved chunks into a context block with video title and
-    timestamp citations (mm:ss markers) to help the LLM ground its answer."""
-    parts = []
-    for chunk in chunks:
-        video_title = chunk.get("video_title", "Unknown Video")
-        content = chunk.get("content", "")
-        start_s = chunk.get("start_seconds", 0.0)
-        mins, secs = divmod(int(start_s), 60)
-        timestamp = f"{mins:02d}:{secs:02d}"
-        parts.append(f"[Source: {video_title} at {timestamp}]\n{content}")
-    return "\n\n---\n\n".join(parts)
 
 
 def _extract_text_from_sse(sse_chunks: list[str]) -> str:
