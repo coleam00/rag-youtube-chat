@@ -291,14 +291,25 @@ def _is_refusal(text: str) -> bool:
 
     This check prevents misleading "Sources (N)" renders when the LLM
     correctly refused to use any retrieved chunks.
+
+    The pattern list is a belt-and-suspenders fallback. The primary
+    mechanism is the system prompt instruction in `llm/openrouter.py`
+    telling the model to use the exact phrase "the video library does not
+    cover that topic" when declining. We include that phrase below plus
+    a curated set of natural refusal phrasings observed across Sonnet 4.6
+    and Kimi K2.6 responses during E2E validation (issue #158).
+
+    Pattern curation rules — every entry should be specific enough that
+    it cannot plausibly appear in a substantive, grounded answer. We
+    prefer multi-word phrases anchored to refusal intent over single
+    tokens ("couldn't find" alone is too loose; "I couldn't find" scoped
+    to first person is safer).
     """
     refusal_patterns = (
+        # -- Enforced phrase (system prompt instructs the model to emit this)
+        "the video library does not cover that topic",
+        # -- Sonnet-era phrasings (existing)
         "not covered in any of the videos",
-        # Contraction-form variants — the LLM often phrases the refusal as
-        # "aren't/isn't covered", which doesn't contain the substring "not".
-        # The E2E regression from pass-1 validation showed this: the model
-        # said "Those topics aren't covered in any of the videos in my
-        # context...", no pattern matched, and "Sources (N)" still rendered.
         "aren't covered in any of the videos",
         "n't covered",
         "n't in the context",
@@ -316,6 +327,51 @@ def _is_refusal(text: str) -> bool:
         "not available in",
         "cannot answer questions about",
         "not able to help",
+        # -- Kimi-era phrasings (observed in E2E for issue #158)
+        # Categorical denials. We deliberately DO NOT add the shorter phrase
+        # "none of the videos" because it plausibly appears in partial answers
+        # like "The library covers X, but none of the videos go into Y". The
+        # longer phrase "none of the videos in this library" is anchored to a
+        # wholesale denial and is what Kimi actually uses on refusals.
+        "none of the videos in this library",
+        "video library doesn't contain",
+        "video library does not contain",
+        "the library doesn't contain",
+        "the library does not contain",
+        # Search-result-specific refusals. We avoid the bare "didn't return
+        # any relevant" pattern because it plausibly appears in technical
+        # discussion of retrieval benchmarks ("Chroma didn't return any
+        # relevant results in the benchmark Cole ran"). Instead we anchor to
+        # the natural forms Kimi actually emits on refusals: first-person
+        # or determiner-prefixed search framings. See E2E samples in #158.
+        "the search didn't return any relevant",
+        "the search did not return any relevant",
+        "my search didn't return any relevant",
+        "my search did not return any relevant",
+        "search of the video library didn't return",
+        "search of the video library did not return",
+        "search of the library didn't return",
+        "search of the library did not return",
+        "my search returned nothing",
+        "the search returned nothing",
+        "no relevant material here",
+        # "Grounded" framing Kimi uses
+        "don't have any grounded",
+        "do not have any grounded",
+        "no grounded information",
+        "no grounded material",
+        # First-person search phrasings (scoped to first person to avoid
+        # false positives on partial answers that happen to use "couldn't
+        # find"). We deliberately do NOT include bare "i didn't find" /
+        # "i did not find" — those appear in natural partial-answer nuance
+        # clauses like "within those videos I didn't find a specific
+        # comparison to X". The "couldn't" forms are rarer outside of
+        # outright refusals.
+        "i couldn't find",
+        "i could not find",
+        # Variant of "I can only answer questions about" used by Kimi
+        "i can only answer based on",
+        "i can only answer using content",
     )
     matched = any(pattern.lower() in text.lower() for pattern in refusal_patterns)
     if matched:

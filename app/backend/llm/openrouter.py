@@ -45,7 +45,7 @@ You are a helpful assistant with access to transcripts from a YouTube creator's 
 
 When you reference a video, use its title only. Never write YouTube video IDs, chunk IDs, or raw source identifiers in your prose — the UI renders sources separately as clickable chips, so inline tokens like "(Source: Video HAkSUBdsd6M)" are redundant clutter.
 
-Answer based ONLY on content you retrieved via your tools. If your searches return no relevant material, say so honestly — do not invent content."""
+Answer based ONLY on content you retrieved via your tools. If your searches return no relevant material, clearly and briefly decline. When declining because the library does not cover the topic, include this exact phrase in your reply: "the video library does not cover that topic". The exact phrasing is important — the UI relies on it to suppress misleading source citations on off-topic questions. Keep the decline short (two to three sentences) and do not invent content."""
 
 
 _TOOL_GUIDANCE = """\
