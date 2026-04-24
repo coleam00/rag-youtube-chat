@@ -107,23 +107,6 @@ KEYWORD_LANGUAGE: str = "english"
 # Set to a very large value (e.g. 999) to effectively disable.
 RETRIEVAL_MAX_PER_VIDEO: int = int(os.environ.get("RETRIEVAL_MAX_PER_VIDEO", "3"))
 
-# Post-retrieval LLM reranker — re-scores hybrid results using a cheap LLM call
-# before they reach the chat model. Adds ~200-400ms latency vs ~0ms disabled.
-RERANKER_ENABLED: bool = os.environ.get("RERANKER_ENABLED", "true").strip().lower() in (
-    "1",
-    "true",
-    "yes",
-    "on",
-)
-# Model used for reranking; must be an OpenRouter chat model ID.
-RERANKER_MODEL: str = os.environ.get("RERANKER_MODEL", "anthropic/claude-haiku-4-5")
-# Number of top chunks the reranker returns to the chat model. Callers typically
-# pass top_n explicitly; this default applies only to direct calls without top_n.
-RERANKER_TOP_N: int = int(os.environ.get("RERANKER_TOP_N", "5"))
-# Retriever over-fetch multiplier when reranker is enabled; gives the reranker
-# a larger candidate pool. retrieve_hybrid is called with top_k * RERANKER_FETCH_FACTOR.
-RERANKER_FETCH_FACTOR: int = int(os.environ.get("RERANKER_FETCH_FACTOR", "4"))
-
 # RAG tool-based retrieval — the LLM drives retrieval via tool calls
 # (search_videos, keyword_search_videos, semantic_search_videos,
 # get_video_transcript) rather than receiving pre-retrieved chunks. Disabled

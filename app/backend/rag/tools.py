@@ -376,8 +376,7 @@ async def execute_search_hybrid(
     embedding_cache: dict[str, list[float]] | None = None,
 ) -> dict[str, Any]:
     """Hybrid (keyword + semantic via RRF) search."""
-    from backend.config import RERANKER_ENABLED, RERANKER_FETCH_FACTOR, RETRIEVAL_MAX_PER_VIDEO
-    from backend.rag.reranker import rerank_chunks
+    from backend.config import RETRIEVAL_MAX_PER_VIDEO
     from backend.rag.retriever_hybrid import retrieve_hybrid
 
     args = _parse_args(raw_arguments)
@@ -390,16 +389,12 @@ async def execute_search_hybrid(
 
     try:
         embedding = await _embed_query(query, embedding_cache)
-        # Over-fetch when reranker is on so it has a larger candidate pool.
-        retrieval_k = top_k * RERANKER_FETCH_FACTOR if RERANKER_ENABLED else top_k
-        chunks = await retrieve_hybrid(query, embedding, top_k=retrieval_k)
+        chunks = await retrieve_hybrid(query, embedding, top_k=top_k)
     except Exception as exc:
         logger.warning("search_hybrid failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
-    if RERANKER_ENABLED:
-        chunks = await rerank_chunks(query, chunks, top_n=top_k)
     chunks = [_normalize_chunk_shape(c) for c in chunks]
     chunks = await _expand_with_neighbors(chunks)
     return {"ok": True, "text": _format_search_results(chunks), "chunks": chunks}
