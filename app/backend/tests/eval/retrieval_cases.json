@@ -289,6 +289,36 @@
       "query": "How do I book a flight to Tokyo?",
       "expected_video_ids": [],
       "category": "out_of_scope"
+    },
+    {
+      "id": "recommend_001",
+      "query": "What vector database does Cole recommend?",
+      "expected_video_ids": ["VectorDBs04"],
+      "category": "recommendation"
+    },
+    {
+      "id": "recommend_002",
+      "query": "What embedding model does Cole prefer?",
+      "expected_video_ids": ["RAGExplain2", "ProdRagPip1"],
+      "category": "recommendation"
+    },
+    {
+      "id": "recommend_003",
+      "query": "What is Cole's go-to framework for building AI agents?",
+      "expected_video_ids": ["AgntBld001a", "LLMToolng06"],
+      "category": "recommendation"
+    },
+    {
+      "id": "recommend_004",
+      "query": "What deployment approach does Cole favor for AI applications?",
+      "expected_video_ids": ["ProdRagPip1"],
+      "category": "recommendation"
+    },
+    {
+      "id": "recommend_005",
+      "query": "Which LLM provider does Cole use and prefer?",
+      "expected_video_ids": ["LLMToolng06", "AgntBld001a"],
+      "category": "recommendation"
     }
   ]
 }
