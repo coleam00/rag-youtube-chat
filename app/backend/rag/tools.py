@@ -389,10 +389,20 @@ async def execute_search_hybrid(
 
     try:
         embedding = await _embed_query(query, embedding_cache)
-        chunks = await retrieve_hybrid(query, embedding, top_k=top_k)
+        # Over-fetch from RRF so the cross-encoder has enough candidates to pick top_k
+        fetch_k = top_k * 4
+        chunks = await retrieve_hybrid(query, embedding, top_k=fetch_k)
     except Exception as exc:
         logger.warning("search_hybrid failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
+
+    try:
+        from backend.rag.reranker import rerank_chunks
+
+        # Re-rank with cross-encoder using original query
+        chunks = await rerank_chunks(query, chunks, top_k=top_k)
+    except Exception as exc:
+        logger.warning("reranker failed, falling back to RRF ordering: %s", exc, exc_info=True)
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     chunks = [_normalize_chunk_shape(c) for c in chunks]
@@ -418,6 +428,13 @@ async def execute_search_keyword(raw_arguments: str | dict) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("search_keyword failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
+
+    try:
+        from backend.rag.reranker import rerank_chunks
+
+        chunks = await rerank_chunks(query, chunks, top_k=top_k)
+    except Exception as exc:
+        logger.warning("reranker failed for keyword search, using unranked: %s", exc, exc_info=True)
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     chunks = [_normalize_chunk_shape(c) for c in chunks]
@@ -447,6 +464,13 @@ async def execute_search_semantic(
     except Exception as exc:
         logger.warning("search_semantic failed: %s", exc, exc_info=True)
         return {"ok": False, "error": f"search failed: {exc}"}
+
+    try:
+        from backend.rag.reranker import rerank_chunks
+
+        chunks = await rerank_chunks(query, chunks, top_k=top_k)
+    except Exception as exc:
+        logger.warning("reranker failed for semantic search, using unranked: %s", exc, exc_info=True)
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     chunks = [_normalize_chunk_shape(c) for c in chunks]

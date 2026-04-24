@@ -36,6 +36,7 @@ dependencies = [
     "pyjwt",
     "email-validator",
     "supadata",
+    "sentence-transformers",
 ]
 
 [project.optional-dependencies]

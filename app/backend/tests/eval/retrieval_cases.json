@@ -289,6 +289,42 @@
       "query": "How do I book a flight to Tokyo?",
       "expected_video_ids": [],
       "category": "out_of_scope"
+    },
+    {
+      "id": "rec_001",
+      "query": "What vector database does Cole recommend?",
+      "expected_video_ids": ["VectorDBs04"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "rec_002",
+      "query": "What embedding model does Cole prefer?",
+      "expected_video_ids": ["AgntBld001a"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "rec_003",
+      "query": "What's Cole's favorite approach for RAG?",
+      "expected_video_ids": ["RAGExplain2"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "rec_004",
+      "query": "Which framework does Cole recommend for AI agents?",
+      "expected_video_ids": ["AgntBld001a"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "rec_005",
+      "query": "What does Cole use for semantic search?",
+      "expected_video_ids": ["VectorDBs04"],
+      "category": "narrow_single_video"
+    },
+    {
+      "id": "rec_006",
+      "query": "What tools does Cole recommend for evaluating AI outputs?",
+      "expected_video_ids": ["AIEvalMtr08"],
+      "category": "narrow_single_video"
     }
   ]
 }
