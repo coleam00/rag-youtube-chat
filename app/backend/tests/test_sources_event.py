@@ -721,6 +721,103 @@ class TestRefusalSourcesSuppressionIntegration:
     suppresses sources event → response contains [DONE] but no 'event: sources'.
     """
 
+    async def test_refusal_persists_sources_as_none(self) -> None:
+        """When LLM refuses, the assistant row persisted to the DB must have
+        ``sources=None`` — otherwise reloading the conversation would bring
+        the misleading 'Sources (N)' chip back, defeating the SSE-level
+        suppression. Belt-and-suspenders fix for issue #158."""
+        import json
+        from unittest.mock import AsyncMock, patch
+        from uuid import uuid4
+
+        from httpx import ASGITransport, AsyncClient
+
+        from backend.auth.tokens import encode_token
+        from backend.main import app
+
+        refusal_text = "Those topics are not covered in any of the videos."
+        refusal_chunk = f"data: {json.dumps(refusal_text)}\n\n"
+        done_chunk = "data: [DONE]\n\n"
+
+        source_citations = [
+            {
+                "chunk_id": "c1",
+                "video_id": "v1",
+                "video_title": "Test Video",
+                "video_url": "u",
+                "start_seconds": 10.0,
+                "end_seconds": 20.0,
+                "snippet": "Test snippet",
+            }
+        ]
+
+        async def mock_stream_chat(
+            messages, tools=None, tool_executor=None, max_tool_calls=0, final_text_out=None
+        ):
+            if tool_executor is not None:
+                await tool_executor("search_videos", json.dumps({"query": "test"}))
+            yield refusal_chunk
+            if final_text_out is not None:
+                final_text_out.append(refusal_text)
+            yield done_chunk
+
+        async def mock_execute_tool(name, raw_args, video_id_whitelist=None, embedding_cache=None):
+            return {"ok": True, "text": "context", "chunks": source_citations}
+
+        test_user_id = str(uuid4())
+        test_conv_id = str(uuid4())
+        valid_token = encode_token(test_user_id)
+
+        async def mock_get_user_by_id(user_id):
+            return {
+                "id": test_user_id,
+                "email": "test@example.com",
+                "password_hash": "hashed",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+
+        async def mock_get_conversation(conv_id, user_id):
+            return {
+                "id": test_conv_id,
+                "user_id": test_user_id,
+                "title": "Test",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+
+        mock_create = AsyncMock(side_effect=[{"id": str(uuid4())}, {"id": str(uuid4())}])
+
+        async def mock_list_messages(conv_id, user_id):
+            return []
+
+        async def mock_list_videos():
+            return [{"id": "v1", "title": "Test Video", "url": "u"}]
+
+        with (
+            patch("backend.auth.dependencies.users_repo.get_user_by_id", mock_get_user_by_id),
+            patch("backend.db.repository.get_conversation", mock_get_conversation),
+            patch("backend.db.repository.create_message", mock_create),
+            patch("backend.db.repository.list_messages", mock_list_messages),
+            patch("backend.db.repository.list_videos", mock_list_videos),
+            patch("backend.routes.messages.stream_chat", mock_stream_chat),
+            patch("backend.routes.messages.execute_tool", mock_execute_tool),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                await client.post(
+                    f"/api/conversations/{test_conv_id}/messages",
+                    json={"content": "off-topic question"},
+                    headers={"Cookie": f"session={valid_token}"},
+                )
+
+        # Two create_message calls: user msg, then assistant msg in finally.
+        assert mock_create.call_count == 2, f"expected 2 calls, got {mock_create.call_count}"
+        assistant_kwargs = mock_create.call_args_list[1].kwargs
+        assert assistant_kwargs["role"] == "assistant"
+        assert assistant_kwargs["sources"] is None, (
+            f"refusal should persist sources=None (reload-scenario protection); "
+            f"got {assistant_kwargs['sources']!r}"
+        )
+
     async def test_sources_event_suppressed_on_refusal(self) -> None:
         """When LLM refuses, the sources SSE event must not be emitted."""
         import json
