@@ -242,7 +242,7 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   const { messages, setMessages, loading, error, conversation } = useMessages(
     conversationId || null,
   );
-  const { streamingContent, streamingSources, isStreaming, startStream, abortStream } =
+  const { streamingContent, streamingSources, streamingStatus, isStreaming, startStream, abortStream } =
     useStreamingResponse();
   const { addToast } = useToast();
   const { refresh: refreshAuth } = useAuth();
@@ -556,6 +556,7 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
                 content={streamingContent}
                 isStreaming={true}
                 sources={streamingSources.length > 0 ? streamingSources : undefined}
+                streamingStatus={streamingStatus}
                 onCitationClick={handleCitationClick}
               />
             )}

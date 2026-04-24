@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Citation } from '../lib/api';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import type { StreamingStatus } from '../hooks/useStreamingResponse';
 
 interface MessageProps {
   role: 'user' | 'assistant';
@@ -11,6 +12,8 @@ interface MessageProps {
   sources?: Citation[];
   /** Called when the user clicks a citation chip */
   onCitationClick?: (citation: Citation) => void;
+  /** Ephemeral status indicator during tool-call rounds */
+  streamingStatus?: StreamingStatus | null;
 }
 
 // ── Typing indicator (3 pulsing dots) ────────────────────────────
@@ -118,7 +121,7 @@ function SourceCitations({
 }
 
 // ── Main message component ────────────────────────────────────────
-export function Message({ role, content, isStreaming, sources, onCitationClick }: MessageProps) {
+export function Message({ role, content, isStreaming, sources, onCitationClick, streamingStatus }: MessageProps) {
   const isUser = role === 'user';
   const hasSources = !isUser && Array.isArray(sources) && sources.length > 0;
 
@@ -142,11 +145,21 @@ export function Message({ role, content, isStreaming, sources, onCitationClick }
           wordBreak: 'break-word',
         }}
       >
-        {isStreaming && !content ? (
+        {isStreaming && !content && !streamingStatus && (
           <TypingIndicator />
-        ) : isUser ? (
+        )}
+        {isStreaming && streamingStatus && (
+          <div className="text-sm text-gray-500">
+            🔍 {streamingStatus.tool}: {streamingStatus.subject}…
+          </div>
+        )}
+        {isStreaming && content && (
           <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
-        ) : (
+        )}
+        {!isStreaming && isUser && (
+          <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
+        )}
+        {!isStreaming && !isUser && (
           <>
             <MarkdownRenderer content={content} />
             {hasSources && <SourceCitations sources={sources} onCitationClick={onCitationClick} />}

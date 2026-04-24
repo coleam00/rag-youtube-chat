@@ -6,10 +6,17 @@ export interface StreamResult {
   sources: Citation[];
 }
 
+export interface StreamingStatus {
+  type: string;
+  tool: string;
+  subject: string;
+}
+
 export function useStreamingResponse() {
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [streamingSources, setStreamingSources] = useState<Citation[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingStatus, setStreamingStatus] = useState<StreamingStatus | null>(null);
 
   const streamAbortRef = useRef<AbortController | null>(null);
 
@@ -29,6 +36,7 @@ export function useStreamingResponse() {
       setIsStreaming(true);
       setStreamingContent('');
       setStreamingSources([]);
+      setStreamingStatus(null);
 
       let fullText = '';
       let sources: Citation[] = [];
@@ -124,6 +132,13 @@ export function useStreamingResponse() {
               } catch (e) {
                 console.warn('[useStreamingResponse] Failed to parse sources event:', e);
               }
+            } else if (eventType === 'status') {
+              try {
+                const parsed = JSON.parse(data);
+                setStreamingStatus(parsed);
+              } catch (e) {
+                console.warn('[useStreamingResponse] Failed to parse status event:', e);
+              }
             } else if (data === '[DONE]') {
               // Stream complete — no action needed here
             } else if (data.startsWith('{"error"')) {
@@ -149,6 +164,8 @@ export function useStreamingResponse() {
               }
               fullText += token;
               setStreamingContent(fullText);
+              // Content tokens arriving means tool-call round is done — clear status.
+              setStreamingStatus(null);
             }
           }
         }
@@ -161,11 +178,12 @@ export function useStreamingResponse() {
         setIsStreaming(false);
         setStreamingContent('');
         setStreamingSources([]);
+        setStreamingStatus(null);
       }
       if (streamError) throw streamError;
     },
     [],
   );
 
-  return { streamingContent, streamingSources, isStreaming, startStream, abortStream };
+  return { streamingContent, streamingSources, streamingStatus, isStreaming, startStream, abortStream };
 }

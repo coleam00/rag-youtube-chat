@@ -96,6 +96,29 @@ ToolExecutor = Callable[[str, str], Awaitable[str]]
 """(tool_name, raw_arguments_json) -> tool result string (role: tool content)."""
 
 
+def _extract_tool_subject(tool_name: str, tool_args_raw: str) -> str:
+    """Extract a human-readable subject from tool arguments for status events.
+
+    For search tools, returns the query string.
+    For transcript tool, returns the video_id.
+    Returns '' for unknown tools.
+
+    Uses regex extraction rather than JSON parsing to handle the case where
+    model streaming causes argument fragments to be duplicated/accumulated,
+    resulting in invalid JSON that would fail json.loads().
+    """
+    import re
+
+    search_tools = {"search_videos", "keyword_search_videos", "semantic_search_videos"}
+    if tool_name in search_tools:
+        m = re.search(r'"query"\s*:\s*"([^"]*)"', tool_args_raw)
+        return m.group(1) if m else ""
+    if tool_name == "get_video_transcript":
+        m = re.search(r'"video_id"\s*:\s*"([^"]*)"', tool_args_raw)
+        return m.group(1) if m else ""
+    return ""
+
+
 async def stream_chat(
     messages: list[dict],
     tools: list[dict] | None = None,
@@ -239,12 +262,20 @@ async def stream_chat(
                     )
                 )
                 for tc in ordered:
+                    tool_name = tc["function"]["name"]
+                    tool_args_raw = tc["function"]["arguments"]
+                    subject = _extract_tool_subject(tool_name, tool_args_raw)
                     # Tool execution (embedding + DB queries) can take a few
                     # seconds per call. Emit a keepalive right before we
                     # await it so browsers/proxies don't idle-timeout the
                     # socket while the coroutine is suspended.
                     yield ": keepalive\n\n"
                     last_heartbeat_at = time.monotonic()
+                    # Signal tool-call start so frontend can show progress.
+                    yield (
+                        f"event: status\n"
+                        f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_name, 'subject': subject})}\n\n"
+                    )
                     if tool_calls_made >= max_tool_calls:
                         payload = (
                             f"Error: per-turn tool call cap ({max_tool_calls}) reached. "
@@ -252,13 +283,16 @@ async def stream_chat(
                         )
                     else:
                         try:
-                            payload = await tool_executor(
-                                tc["function"]["name"], tc["function"]["arguments"]
-                            )
+                            payload = await tool_executor(tool_name, tool_args_raw)
                         except Exception as exc:
                             logger.warning("tool executor raised: %s", exc)
                             payload = f"Error: tool execution failed: {exc}"
                     tool_calls_made += 1
+                    # Signal tool-call done so frontend can update/clear progress.
+                    yield (
+                        f"event: status\n"
+                        f"data: {json.dumps({'type': 'tool_call_done', 'tool': tool_name})}\n\n"
+                    )
                     full_messages.append(
                         cast(
                             ChatCompletionMessageParam,
