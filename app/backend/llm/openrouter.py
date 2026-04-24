@@ -104,7 +104,8 @@ def _extract_tool_subject(tool_name: str, tool_args_raw: str) -> str:
     """
     try:
         args = json.loads(tool_args_raw)
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.debug("_extract_tool_subject: parse error for %r: %s", tool_args_raw, exc)
         return ""
     if not isinstance(args, dict):
         return ""
@@ -266,12 +267,14 @@ async def stream_chat(
                     last_heartbeat_at = time.monotonic()
                     tool_name = tc["function"]["name"]
                     tool_args_raw = tc["function"]["arguments"]
-                    subject = _extract_tool_subject(tool_name, tool_args_raw)
-                    yield (
-                        "event: status\n"
-                        f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_name, 'subject': subject})}\n\n"
-                    )
-                    if tool_calls_made >= max_tool_calls:
+                    will_execute = tool_calls_made < max_tool_calls
+                    if will_execute:
+                        subject = _extract_tool_subject(tool_name, tool_args_raw)
+                        yield (
+                            "event: status\n"
+                            f"data: {json.dumps({'type': 'tool_call_start', 'tool': tool_name, 'subject': subject})}\n\n"
+                        )
+                    if not will_execute:
                         payload = (
                             f"Error: per-turn tool call cap ({max_tool_calls}) reached. "
                             "No more tool calls will be executed for this user turn."
@@ -280,12 +283,13 @@ async def stream_chat(
                         try:
                             payload = await tool_executor(tool_name, tool_args_raw)
                         except Exception as exc:
-                            logger.warning("tool executor raised: %s", exc)
+                            logger.warning("tool executor raised: %s", exc, exc_info=True)
                             payload = f"Error: tool execution failed: {exc}"
-                    yield (
-                        "event: status\n"
-                        f"data: {json.dumps({'type': 'tool_call_done', 'tool': tool_name})}\n\n"
-                    )
+                    if will_execute:
+                        yield (
+                            "event: status\n"
+                            f"data: {json.dumps({'type': 'tool_call_done', 'tool': tool_name})}\n\n"
+                        )
                     tool_calls_made += 1
                     full_messages.append(
                         cast(

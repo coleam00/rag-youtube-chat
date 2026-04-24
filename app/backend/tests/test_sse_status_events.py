@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 
 class _FakeDeltaChunk:
     """Mimics a single chunk in OpenRouter's streaming response."""
@@ -183,3 +185,86 @@ class TestSseStatusEvents:
                 assert payload["tool"] == "search_videos"
             else:
                 raise AssertionError(f"unexpected status event type: {payload['type']}")
+
+
+@pytest.mark.parametrize(
+    "tool_name,args_raw,expected",
+    [
+        ("search_videos", json.dumps({"query": "agents"}), "agents"),
+        ("keyword_search_videos", json.dumps({"query": "RAG"}), "RAG"),
+        ("semantic_search_videos", json.dumps({"query": "LLM"}), "LLM"),
+        ("get_video_transcript", json.dumps({"video_id": "abc123"}), "abc123"),
+        ("unknown_tool", json.dumps({"query": "x"}), ""),
+        ("search_videos", "not-valid-json {", ""),  # JSONDecodeError
+        ("search_videos", json.dumps([1, 2, 3]), ""),  # non-dict guard
+        ("search_videos", json.dumps({}), ""),  # missing key → empty string
+    ],
+)
+def test_extract_tool_subject(tool_name: str, args_raw: str, expected: str) -> None:
+    from backend.llm.openrouter import _extract_tool_subject
+
+    assert _extract_tool_subject(tool_name, args_raw) == expected
+
+
+def test_extract_tool_subject_type_error() -> None:
+    """TypeError branch: json.loads raises when passed None."""
+    from backend.llm.openrouter import _extract_tool_subject
+
+    result = _extract_tool_subject("search_videos", None)  # type: ignore[arg-type]
+    assert result == ""
+
+
+class TestCapReachedNoStatusEvents:
+    """Verify that status events are NOT emitted when the per-turn cap is already reached."""
+
+    async def test_no_status_events_when_cap_reached(self) -> None:
+        from backend.llm.openrouter import stream_chat
+
+        tool_args = '{"query": "test"}'
+
+        round1_chunks = [
+            _FakeDeltaChunk(
+                tool_calls=[_FakeToolCallDelta(0, call_id="call_1", name="search_videos")]
+            ),
+            _FakeDeltaChunk(tool_calls=[_FakeToolCallDelta(0, arguments=tool_args)]),
+            _FakeDeltaChunk(finish_reason="tool_calls"),
+        ]
+
+        round2_chunks = [
+            _FakeDeltaChunk(content="Sorry, cap reached."),
+            _FakeDeltaChunk(finish_reason="stop"),
+        ]
+
+        streams = [
+            _FakeStream(round1_chunks),
+            _FakeStream(round2_chunks),
+        ]
+        create_mock = AsyncMock(side_effect=streams)
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock))
+        )
+
+        async def instant_executor(name: str, raw_args: str) -> str:
+            return "result"
+
+        emitted: list[str] = []
+        with (
+            patch("backend.llm.openrouter._get_async_client", return_value=fake_client),
+            patch(
+                "backend.llm.openrouter.build_system_prompt",
+                new=AsyncMock(return_value=[{"type": "text", "text": "system"}]),
+            ),
+        ):
+            async for chunk in stream_chat(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"type": "function", "function": {"name": "search_videos"}}],
+                tool_executor=instant_executor,
+                max_tool_calls=0,  # cap already reached from the start
+            ):
+                emitted.append(chunk)
+
+        # No status events should have been emitted
+        status_events = [c for c in emitted if c.startswith("event: status\n")]
+        assert len(status_events) == 0, (
+            f"expected no status events when cap=0, got: {status_events}"
+        )

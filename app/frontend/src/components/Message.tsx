@@ -153,8 +153,8 @@ export function Message({
       >
         {isStreaming && !content ? (
           streamingStatus ? (
-            <div style={{ color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>
-              Searching: {streamingStatus.subject}…
+            <div className="text-slate-400 text-[13px] italic">
+              {streamingStatus.subject ? `Searching: ${streamingStatus.subject}…` : 'Working…'}
             </div>
           ) : (
             <TypingIndicator />

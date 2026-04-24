@@ -6,9 +6,19 @@
  *   - Handles malformed sources JSON gracefully with console.warn
  */
 
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStreamingResponse } from './useStreamingResponse';
+
+function makeSseStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+}
 
 const mockCitation = {
   chunk_id: 'chunk-1',
@@ -117,108 +127,135 @@ describe('useStreamingResponse SSE parsing', () => {
   });
 });
 
-describe('status event SSE parsing', () => {
+describe('status event SSE parsing — hook state transitions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('sets streamingStatus on tool_call_start', () => {
-    const eventType = 'status';
-    const data = JSON.stringify({
+  it('sets and clears streamingStatus through the real hook (start → done → cleared)', async () => {
+    const startPayload = JSON.stringify({
+      type: 'tool_call_start',
+      tool: 'search_videos',
+      subject: 'building agents',
+    });
+    const donePayload = JSON.stringify({ type: 'tool_call_done', tool: 'search_videos' });
+
+    const sseChunks = [
+      `event: status\ndata: ${startPayload}\n\n`,
+      `event: status\ndata: ${donePayload}\n\n`,
+      `data: "Answer here."\n\n`,
+      'data: [DONE]\n\n',
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: makeSseStream(sseChunks),
+      }),
+    );
+
+    const onComplete = vi.fn();
+    const { result } = renderHook(() => useStreamingResponse());
+
+    await act(async () => {
+      await result.current.startStream('conv-1', 'hi', onComplete);
+    });
+
+    // After the stream ends, streamingStatus must be null (cleared in finally)
+    expect(result.current.streamingStatus).toBeNull();
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ fullText: 'Answer here.' }));
+  });
+
+  it('clears streamingStatus when first content token arrives (no tool_call_done)', async () => {
+    const startPayload = JSON.stringify({
       type: 'tool_call_start',
       tool: 'search_videos',
       subject: 'building agents',
     });
 
-    let status: { tool: string; subject: string } | null = null;
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-        if (parsed.type === 'tool_call_start') {
-          status = { tool: String(parsed.tool ?? ''), subject: String(parsed.subject ?? '') };
-        }
-      }
-    } catch {
-      // ignore
-    }
+    // Deliberately omit tool_call_done — content token must clear status
+    const sseChunks = [
+      `event: status\ndata: ${startPayload}\n\n`,
+      `data: "Token"\n\n`,
+      'data: [DONE]\n\n',
+    ];
 
-    expect(status).not.toBeNull();
-    expect(status?.tool).toBe('search_videos');
-    expect(status?.subject).toBe('building agents');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: makeSseStream(sseChunks),
+      }),
+    );
+
+    const { result } = renderHook(() => useStreamingResponse());
+
+    await act(async () => {
+      await result.current.startStream('conv-1', 'hi', vi.fn());
+    });
+
+    expect(result.current.streamingStatus).toBeNull();
   });
 
-  it('clears streamingStatus on tool_call_done', () => {
-    const eventType = 'status';
-    const data = JSON.stringify({ type: 'tool_call_done', tool: 'search_videos' });
+  it('warns and leaves status null on malformed status event JSON', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    let status: { tool: string; subject: string } | null = {
-      tool: 'search_videos',
-      subject: 'building agents',
-    };
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-        if (parsed.type === 'tool_call_start') {
-          status = { tool: String(parsed.tool ?? ''), subject: String(parsed.subject ?? '') };
-        } else if (parsed.type === 'tool_call_done') {
-          status = null;
-        }
-      }
-    } catch {
-      // ignore
-    }
+    const sseChunks = [
+      'event: status\ndata: not valid json {\n\n',
+      'data: "Answer."\n\n',
+      'data: [DONE]\n\n',
+    ];
 
-    expect(status).toBeNull();
-  });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: makeSseStream(sseChunks),
+      }),
+    );
 
-  it('warns on malformed status JSON', () => {
-    const warnMock = vi.fn();
-    const originalWarn = console.warn;
-    console.warn = warnMock;
+    const { result } = renderHook(() => useStreamingResponse());
 
-    const eventType = 'status';
-    const data = 'not valid json {';
+    await act(async () => {
+      await result.current.startStream('conv-1', 'hi', vi.fn());
+    });
 
-    let status: { tool: string; subject: string } | null = null;
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-        if (parsed.type === 'tool_call_start') {
-          status = { tool: String(parsed.tool ?? ''), subject: String(parsed.subject ?? '') };
-        }
-      }
-    } catch (e) {
-      console.warn('[useStreamingResponse] Failed to parse status event:', e);
-    }
-
-    expect(status).toBeNull();
-    expect(warnMock).toHaveBeenCalledWith(
+    expect(result.current.streamingStatus).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
       '[useStreamingResponse] Failed to parse status event:',
       expect.any(Error),
     );
-
-    console.warn = originalWarn;
   });
 
-  it('ignores unknown status type', () => {
-    const eventType = 'status';
-    const data = JSON.stringify({ type: 'unknown_event', tool: 'foo' });
+  it('ignores unknown status type and leaves streamingStatus null', async () => {
+    const unknownPayload = JSON.stringify({ type: 'future_event', tool: 'foo' });
 
-    let status: { tool: string; subject: string } | null = null;
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-        if (parsed.type === 'tool_call_start') {
-          status = { tool: String(parsed.tool ?? ''), subject: String(parsed.subject ?? '') };
-        } else if (parsed.type === 'tool_call_done') {
-          status = null;
-        }
-      }
-    } catch {
-      // ignore
-    }
+    const sseChunks = [
+      `event: status\ndata: ${unknownPayload}\n\n`,
+      'data: "Answer."\n\n',
+      'data: [DONE]\n\n',
+    ];
 
-    expect(status).toBeNull();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: makeSseStream(sseChunks),
+      }),
+    );
+
+    const { result } = renderHook(() => useStreamingResponse());
+
+    await act(async () => {
+      await result.current.startStream('conv-1', 'hi', vi.fn());
+    });
+
+    expect(result.current.streamingStatus).toBeNull();
   });
 });
 
