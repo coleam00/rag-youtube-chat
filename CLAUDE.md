@@ -65,7 +65,6 @@ rag-youtube-chat/
 │   │   │   ├── catalog.py      # In-process video catalog cache; builds cache_control block for system prompt
 │   │   │   ├── chunker.py      # Docling HybridChunker wrapper
 │   │   │   ├── embeddings.py  # embed_text / embed_batch via OpenRouter
-│   │   │   ├── reranker.py     # Post-retrieval listwise LLM reranker; re-scores hybrid candidates via a single cheap LLM call; falls back to RRF order on error
 │   │   │   ├── retriever.py    # NumPy cosine similarity top-k (legacy)
 │   │   │   └── retriever_hybrid.py  # RRF hybrid (tsvector + pgvector, replaces retriever.py for message retrieval)
 │   │   ├── routes/
@@ -263,7 +262,7 @@ These behaviors are part of DynaChat's contract and must not regress. The agent-
 
 1. **Chunking** uses Docling `HybridChunker` with `max_tokens=512` (`HYBRID_CHUNKER_MAX_TOKENS` in `config.py`). Do not swap to recursive-character splitters or LangChain chunkers.
 2. **Embeddings** come from OpenRouter's `openai/text-embedding-3-small` (1536-dim). Never call a different embedding model or provider. Never embed on the frontend.
-3. **Retrieval** uses a two-stage pipeline: (a) hybrid Reciprocal Rank Fusion (RRF) combining Postgres tsvector keyword search with pgvector cosine similarity (`rag/retriever_hybrid.py`), followed by (b) an optional post-retrieval LLM reranker (`rag/reranker.py`, controlled by `RERANKER_ENABLED`) that calls `anthropic/claude-haiku-4-5` via OpenRouter to re-score candidates for intent alignment before the top-k are sent to the chat model. Do not introduce a different retrieval backend without an explicit issue authorizing it.
+3. **Retrieval** is in-process NumPy cosine similarity over all chunks, top-k = 5. This is acceptable until the library grows large. Do not introduce a vector database (FAISS, Chromo, pgvector) without an explicit issue authorizing it — that's an architectural change requiring human approval. **Exception (issue #59):** hybrid retrieval via Reciprocal Rank Fusion (RRF) combining Postgres tsvector keyword search with pgvector cosine similarity is authorized. See `app/backend/rag/retriever_hybrid.py`.
 4. **Chat completion** uses OpenRouter's `anthropic/claude-sonnet-4.6` via the `openai` SDK pointed at `https://openrouter.ai/api/v1`. Do not change the provider or the model in a PR — that's out of scope per MISSION.md.
 5. **Streaming format:** Server-Sent Events with JSON-encoded tokens. Each token is framed as `data: <json-string>\n\n`. The `sources` event is emitted as `event: sources\ndata: <json-array>\n\n` **before** the `data: [DONE]\n\n` terminator. Do not change this format — the frontend parser in `useStreamingResponse.ts` depends on it exactly.
 6. **Citations** must include video title, video URL, exact timestamp deep-link, and the quoted transcript snippet. The citation modal opens an embedded YouTube player at the timestamp. This is a MISSION.md quality bar — removing or regressing any of these fields is an auto-reject.
@@ -284,10 +283,6 @@ All env var reads happen in `app/backend/config.py`. Add new variables there and
 | `CORS_ORIGINS` | No (dev default) | Comma-separated list of allowed CORS origins. Defaults to `http://localhost:{FRONTEND_PORT},http://127.0.0.1:{FRONTEND_PORT}`. Used in `app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS)` in `main.py`. |
 | `CATALOG_ENABLED` | No (default: `false`) | Injects a video-catalog block into the system prompt to enable Anthropic prompt caching. Accepted values: `1`, `true`, `yes`, `on`. Adds input tokens on every request (even cache hits). |
 | `CATALOG_TIER` | No (default: `standard`) | Cache tier: `standard` = ~5-min ephemeral; `extended` = 1-hour TTL (3600 s). Ignored when `CATALOG_ENABLED` is false. |
-| `RERANKER_ENABLED` | No (default: `true`) | Enables post-retrieval LLM reranker on hybrid search results. Default on. Set to `false` to skip reranking and save ~200-400ms per query. |
-| `RERANKER_MODEL` | No (default: `anthropic/claude-haiku-4-5`) | OpenRouter model ID used for reranking. Must be a chat model; haiku-4-5 balances quality and cost. |
-| `RERANKER_TOP_N` | No (default: `5`) | Number of top-ranked chunks the reranker returns to the chat model. Callers typically pass `top_n` explicitly; this default applies only to direct calls without `top_n`. |
-| `RERANKER_FETCH_FACTOR` | No (default: `4`) | Over-fetch multiplier applied to `top_k` when reranker is enabled, giving it a larger candidate pool before trimming. |
 
 Everything else is currently hardcoded in `config.py` (model names, ports, chunk size, top-k). When adding configurability, add the constant to `config.py` with a sensible default:
 

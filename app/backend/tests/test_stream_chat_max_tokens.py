@@ -117,7 +117,7 @@ class TestToolChoiceNoneOnCapReached:
     next request. Anthropic via OpenRouter then saw conversation history
     full of tool_use/tool_result blocks but no declared tools, and
     returned finish_reason=stop with zero content tokens. Fix: keep
-    tools declared but set tool_choice="none" to forbid further tool
+    tools declared but set tool_choice=\"none\" to forbid further tool
     calls while still giving the model a valid tool context — it then
     composes a final answer from the retrieved chunks it already has.
     """
