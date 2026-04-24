@@ -453,6 +453,190 @@ class TestRefusalSourcesSuppression:
         )
         assert _is_refusal(text) is True
 
+
+class TestRefusalSourcesSuppressionKimi:
+    """Kimi K2.6 phrasings (issue #158).
+
+    After swapping the chat model from Sonnet 4.6 to Kimi K2.6 in PR #155,
+    E2E testing on chat.dynamous.ai showed Kimi phrases refusals very
+    differently from Sonnet, and the prior pattern list missed all of them.
+    Each test below is a verbatim (or near-verbatim) capture from the live
+    production API during the issue #158 investigation.
+    """
+
+    def test_is_refusal_detects_enforced_phrase(self) -> None:
+        """Primary mechanism: the system prompt tells the model to include
+        this exact phrase when declining. If the instruction is followed,
+        this pattern alone catches the refusal — all other patterns in this
+        class are belt-and-suspenders for when the model paraphrases."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "I'm sorry, but the video library does not cover that topic. "
+            "You'll need to check elsewhere."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_none_of_the_videos(self) -> None:
+        """E2E sample — query: 'What's the tallest mountain in South America?'"""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "None of the videos in this library mention mountains or South "
+            "America. The content here focuses on AI, agentic workflows, "
+            "coding assistants, and related tech topics, so I don't have "
+            "any grounded information to answer your geography question."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_didnt_return_any_relevant(self) -> None:
+        """E2E sample — query: 'When did WWII end?'"""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "The search of the video library didn't return any relevant "
+            "information about World War II or when it ended. The content "
+            "in this library is focused on AI, coding agents, software "
+            "development, and technology topics."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_library_doesnt_contain(self) -> None:
+        """E2E sample — query: 'Who is Taylor Swift dating?'"""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "The video library doesn't contain any content about Taylor "
+            "Swift or who she's dating. The search results only returned "
+            'unrelated technology videos where words like "dating" or '
+            '"date" appear in completely different contexts.'
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_i_can_only_answer_based_on(self) -> None:
+        """E2E sample variant — Kimi often uses this variant of the existing
+        'I can only answer questions about' pattern."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "I can only answer based on content retrieved from this library, "
+            "and there's no relevant material here for your question."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_i_couldnt_find(self) -> None:
+        """E2E sample — query: 'What's the recipe for chocolate chip cookies?'
+
+        This is the original E2E failure that prompted issue #158.
+        """
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "I searched through the video library, but I couldn't find an "
+            "actual recipe for chocolate chip cookies. The videos that "
+            "mention 'cookies' are only using them as examples in AI agent "
+            "demos (like creating a task to 'bake cookies'), rather than "
+            "providing a cooking recipe."
+        )
+        assert _is_refusal(text) is True
+
+    def test_is_refusal_detects_no_grounded_material(self) -> None:
+        """Kimi uses 'grounded material' / 'grounded information' language
+        that no Sonnet-era pattern matches."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "My search returned nothing relevant, so I don't have any "
+            "grounded material to answer your question."
+        )
+        assert _is_refusal(text) is True
+
+
+class TestRefusalSourcesSuppressionNegative:
+    """Negative guardrails — legitimate answers must NOT trigger refusal
+    detection. A false positive would suppress the Sources (N) chip on a
+    grounded answer, which is a worse UX regression than a missed refusal."""
+
+    def test_is_refusal_rejects_partial_coverage_answer(self) -> None:
+        """The library may partially cover a topic. Phrases like 'does not
+        cover' inside a substantive answer must not trigger refusal."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "The video on Claude Code subagents does not cover advanced "
+            "patterns like nested subagents in detail, but it does explain "
+            "the basics of parallel task fan-out and how to pick tools per "
+            "subagent. The speaker recommends starting with flat subagent "
+            "layouts before nesting."
+        )
+        assert _is_refusal(text) is False
+
+    def test_is_refusal_rejects_answer_mentioning_search(self) -> None:
+        """Legit answers that mention the search being done but DID find
+        results must not match — 'I searched ... and found ...' is the
+        opposite of a refusal."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "I searched through the video library and found several videos "
+            "that explain hybrid RAG. Cole's consistent recommendation is "
+            "hybrid search because it works well across different use cases."
+        )
+        assert _is_refusal(text) is False
+
+    def test_is_refusal_rejects_answer_with_didnt_find_small_detail(self) -> None:
+        """'didn't find' inside a substantive answer about something a video
+        didn't address in detail must not trigger."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "Cole's walkthrough focuses on keyword + semantic hybrid RAG. "
+            "Within those videos I didn't find a specific comparison to "
+            "ColBERT — but the core message is that BM25 + dense retrieval "
+            "with RRF handles the vast majority of production use cases."
+        )
+        assert _is_refusal(text) is False
+
+    def test_is_refusal_rejects_grounded_answer_mentioning_couldnt(self) -> None:
+        """A grounded answer that happens to contain 'couldn't' without
+        first-person + 'find' must not match."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "Cole explains that the previous retrieval setup couldn't keep "
+            "up with user queries at scale, which is why he moved to pgvector "
+            "with HNSW indexing. He walks through the benchmarks in detail."
+        )
+        assert _is_refusal(text) is False
+
+    def test_is_refusal_rejects_partial_answer_with_none_of_the_videos(self) -> None:
+        """Partial grounded answer that happens to contain 'none of the videos'
+        as a nuance clause must NOT match. This is why we use the stricter
+        'none of the videos in this library' pattern instead of the bare phrase
+        — a grounded answer that describes what IS in the library and then
+        adds a nuance about what isn't covered is legitimate content with
+        sources that should still render.
+        """
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "The video library contains several deep-dive videos on RAG "
+            "architecture, including coverage of chunking strategies, hybrid "
+            "search, and re-ranking. None of the videos go into embedding "
+            "fine-tuning, though — that's addressed in a separate series."
+        )
+        assert _is_refusal(text) is False
+
+    def test_is_refusal_rejects_short_grounded_answer(self) -> None:
+        """Short grounded answer — must not match anything."""
+        from backend.routes.messages import _is_refusal
+
+        text = (
+            "Based on the videos, Cole recommends starting with hybrid search "
+            "before adding re-ranking or query expansion."
+        )
+        assert _is_refusal(text) is False
+
     def test_is_refusal_detects_other_contractions(self) -> None:
         """Other common contraction-form refusals the LLM may emit."""
         from backend.routes.messages import _is_refusal
