@@ -20,16 +20,14 @@ def _make_chunks(n: int) -> list[dict]:
     ]
 
 
-def _mock_response(indices: list[int]) -> SimpleNamespace:
-    msg = SimpleNamespace(content=json.dumps(indices))
-    choice = SimpleNamespace(message=msg)
-    return SimpleNamespace(choices=[choice])
-
-
 def _mock_response_raw(raw: str) -> SimpleNamespace:
     msg = SimpleNamespace(content=raw)
     choice = SimpleNamespace(message=msg)
     return SimpleNamespace(choices=[choice])
+
+
+def _mock_response(indices: list[int]) -> SimpleNamespace:
+    return _mock_response_raw(json.dumps(indices))
 
 
 async def test_rerank_happy_path(monkeypatch):
