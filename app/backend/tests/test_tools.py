@@ -86,11 +86,16 @@ _FAKE_CHUNKS = [
 @pytest.mark.asyncio
 async def test_execute_search_hybrid_happy_path(monkeypatch) -> None:
     async def fake_retrieve(_q, _emb, top_k=5):
-        assert top_k == 10
+        # When RERANKER_ENABLED (default), top_k is multiplied by RERANKER_FETCH_FACTOR (4).
+        assert top_k == 10 * 4
         return _FAKE_CHUNKS
+
+    async def fake_rerank(_query, chunks, top_n=None):
+        return chunks[:top_n] if top_n else chunks
 
     monkeypatch.setattr("backend.rag.retriever_hybrid.retrieve_hybrid", fake_retrieve)
     monkeypatch.setattr("backend.rag.embeddings.embed_text", lambda _s: [0.0] * 1536)
+    monkeypatch.setattr("backend.rag.reranker.rerank_chunks", fake_rerank)
 
     result = await execute_search_hybrid(json.dumps({"query": "rag pipelines"}))
     assert result["ok"] is True
