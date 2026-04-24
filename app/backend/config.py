@@ -105,7 +105,6 @@ KEYWORD_LANGUAGE: str = "english"
 # Cross-encoder reranker (post-RRF re-ranking)
 RERANKER_MODEL: str = os.environ.get("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 RERANKER_OVERFETCH: int = 4  # fetch top_k * 4 from RRF for reranking
-RERANKER_TOP_N: int = 5     # return top N after reranking
 
 # Per-video diversity cap applied after each search-tool call. Prevents one
 # long video from monopolizing the retrieved context on broad questions.

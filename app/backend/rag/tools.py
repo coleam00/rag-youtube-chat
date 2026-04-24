@@ -179,7 +179,12 @@ async def _hydrate_chunks(raw_chunks: list[dict]) -> list[dict]:
         try:
             video = await repository.get_video(vid)
         except Exception as exc:
-            logger.warning("hydrate: get_video failed for %s: %s", vid, exc, exc_info=True)
+            logger.error(
+                "hydrate: get_video failed for %s (returning Unknown Video): %s",
+                vid,
+                exc,
+                exc_info=True,
+            )
             video = None
         info = video or {}
         return vid, {
@@ -376,7 +381,7 @@ async def execute_search_hybrid(
     embedding_cache: dict[str, list[float]] | None = None,
 ) -> dict[str, Any]:
     """Hybrid (keyword + semantic via RRF) search."""
-    from backend.config import RETRIEVAL_MAX_PER_VIDEO
+    from backend.config import RERANKER_OVERFETCH, RETRIEVAL_MAX_PER_VIDEO
     from backend.rag.retriever_hybrid import retrieve_hybrid
 
     args = _parse_args(raw_arguments)
@@ -390,7 +395,7 @@ async def execute_search_hybrid(
     try:
         embedding = await _embed_query(query, embedding_cache)
         # Over-fetch from RRF so the cross-encoder has enough candidates to pick top_k
-        fetch_k = top_k * 4
+        fetch_k = top_k * RERANKER_OVERFETCH
         chunks = await retrieve_hybrid(query, embedding, top_k=fetch_k)
     except Exception as exc:
         logger.warning("search_hybrid failed: %s", exc, exc_info=True)
@@ -470,7 +475,9 @@ async def execute_search_semantic(
 
         chunks = await rerank_chunks(query, chunks, top_k=top_k)
     except Exception as exc:
-        logger.warning("reranker failed for semantic search, using unranked: %s", exc, exc_info=True)
+        logger.warning(
+            "reranker failed for semantic search, using unranked: %s", exc, exc_info=True
+        )
 
     chunks = _apply_per_video_cap(chunks, RETRIEVAL_MAX_PER_VIDEO)
     chunks = [_normalize_chunk_shape(c) for c in chunks]

@@ -66,7 +66,8 @@ rag-youtube-chat/
 │   │   │   ├── chunker.py      # Docling HybridChunker wrapper
 │   │   │   ├── embeddings.py  # embed_text / embed_batch via OpenRouter
 │   │   │   ├── retriever.py    # NumPy cosine similarity top-k (legacy)
-│   │   │   └── retriever_hybrid.py  # RRF hybrid (tsvector + pgvector, replaces retriever.py for message retrieval)
+│   │   │   ├── retriever_hybrid.py  # RRF hybrid (tsvector + pgvector, replaces retriever.py for message retrieval)
+│   │   │   └── reranker.py    # Cross-encoder reranker (cross-encoder/ms-marco-MiniLM-L-6-v2)
 │   │   ├── routes/
 │   │   │   ├── channels.py      # POST /api/channels/sync, GET /api/channels/sync-runs
 │   │   │   ├── conversations.py # GET/POST/DELETE /api/conversations*, GET /api/videos

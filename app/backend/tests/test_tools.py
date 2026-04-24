@@ -86,17 +86,48 @@ _FAKE_CHUNKS = [
 @pytest.mark.asyncio
 async def test_execute_search_hybrid_happy_path(monkeypatch) -> None:
     async def fake_retrieve(_q, _emb, top_k=5):
-        assert top_k == 10
+        assert top_k == 40  # fetch_k = top_k(10) * RERANKER_OVERFETCH(4)
         return _FAKE_CHUNKS
+
+    async def fake_rerank(query, chunks, top_k=5):
+        return [
+            {**c, "cross_encoder_score": 0.9 - i * 0.1}
+            for i, c in enumerate(chunks)
+        ]
 
     monkeypatch.setattr("backend.rag.retriever_hybrid.retrieve_hybrid", fake_retrieve)
     monkeypatch.setattr("backend.rag.embeddings.embed_text", lambda _s: [0.0] * 1536)
+    monkeypatch.setattr("backend.rag.reranker.rerank_chunks", fake_rerank)
 
     result = await execute_search_hybrid(json.dumps({"query": "rag pipelines"}))
     assert result["ok"] is True
     assert "How RAG Works" in result["text"]
     assert "at 00:00" in result["text"]
+    # Verify content and chunk_id match (cross_encoder_score is stripped by normalization)
+    assert result["chunks"][0]["content"] == _FAKE_CHUNKS[0]["content"]
+    assert result["chunks"][0]["chunk_id"] == _FAKE_CHUNKS[0]["chunk_id"]
+
+
+@pytest.mark.asyncio
+async def test_execute_search_hybrid_falls_back_when_reranker_raises(monkeypatch) -> None:
+    """When reranker raises, chunks are returned in RRF order (fallback)."""
+
+    async def fake_retrieve(_q, _emb, top_k=5):
+        return _FAKE_CHUNKS
+
+    async def fake_rerank_raises(query, chunks, top_k=5):
+        raise RuntimeError("CrossEncoder unavailable")
+
+    monkeypatch.setattr("backend.rag.retriever_hybrid.retrieve_hybrid", fake_retrieve)
+    monkeypatch.setattr("backend.rag.embeddings.embed_text", lambda _s: [0.0] * 1536)
+    monkeypatch.setattr("backend.rag.reranker.rerank_chunks", fake_rerank_raises)
+
+    result = await execute_search_hybrid(json.dumps({"query": "rag pipelines"}))
+    assert result["ok"] is True
+    # Chunks should be the unranked RRF output
     assert result["chunks"] == _FAKE_CHUNKS
+    # Verify cross_encoder_score is NOT attached (fallback didn't run reranker)
+    assert all("cross_encoder_score" not in c for c in result["chunks"])
 
 
 @pytest.mark.asyncio

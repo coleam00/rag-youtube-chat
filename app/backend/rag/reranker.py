@@ -13,24 +13,32 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from sentence_transformers import CrossEncoder
+
 # Module-level model cache — loaded once, reused across calls
-_cross_encoder: "CrossEncoder | None" = None
+_cross_encoder: CrossEncoder | None = None  # type: ignore[valid-type]
 
 
-def _get_cross_encoder() -> "CrossEncoder":
+def _get_cross_encoder() -> CrossEncoder:  # type: ignore[valid-type]
     """Lazily load and cache the cross-encoder model."""
     global _cross_encoder
     if _cross_encoder is None:
-        from backend.config import RERANKER_MODEL
-
         from sentence_transformers import CrossEncoder
 
-        logger.info("Loading cross-encoder model: %s", RERANKER_MODEL)
-        _cross_encoder = CrossEncoder(RERANKER_MODEL)
-        logger.info("Cross-encoder model loaded successfully")
+        from backend.config import RERANKER_MODEL
+
+        try:
+            logger.info("Loading cross-encoder model: %s", RERANKER_MODEL)
+            _cross_encoder = CrossEncoder(RERANKER_MODEL)
+            logger.info("Cross-encoder model loaded successfully")
+        except Exception as exc:
+            logger.error("Failed to load cross-encoder model %s: %s", RERANKER_MODEL, exc)
+            raise RuntimeError(f"Cross-encoder model loading failed: {exc}") from exc
     return _cross_encoder
 
 
@@ -69,10 +77,7 @@ async def rerank_chunks(
     scores: list[float] = await asyncio.to_thread(_score)
 
     # Attach score to each chunk and sort by score descending
-    scored = [
-        {**c, "cross_encoder_score": float(scores[i])}
-        for i, c in enumerate(chunks)
-    ]
+    scored = [{**c, "cross_encoder_score": float(scores[i])} for i, c in enumerate(chunks)]
     scored.sort(key=lambda x: x["cross_encoder_score"], reverse=True)
 
     return scored[:top_k]

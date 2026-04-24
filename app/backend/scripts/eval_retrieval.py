@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.db.postgres import close_pg_pool, init_pg_pool
 from backend.rag.embeddings import embed_text
+from backend.rag.reranker import rerank_chunks
 from backend.rag.retriever_hybrid import retrieve_hybrid
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
@@ -127,6 +128,13 @@ async def run_case(case: dict) -> dict:
     except Exception as exc:
         logger.warning("Case %s: retrieval failed (%s) — counting as miss", case_id, exc)
         return _miss_result(case_id, category, expected_video_ids)
+
+    # Apply cross-encoder reranking (same pipeline as production tools.py)
+    if results:
+        try:
+            results = await rerank_chunks(query_text, results, top_k=RETRIEVE_TOP_K)
+        except Exception as exc:
+            logger.warning("Case %s: reranking failed (%s) — using RRF ordering", case_id, exc)
 
     # Fixture expected_video_ids are YouTube video IDs (the `?v=` URL param),
     # but retrieve_hybrid returns DB UUIDs in `video_id`. Extract the YouTube
