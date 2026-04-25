@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Citation } from '../lib/api';
+import { formatTimestamp } from './CitationModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface MessageProps {
@@ -27,13 +28,6 @@ function TypingIndicator() {
 }
 
 // ── Source citations section ──────────────────────────────────────
-function formatTimestamp(seconds: number): string {
-  const s = Math.floor(seconds);
-  const mins = Math.floor(s / 60);
-  const secs = s % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
 // Two-tier citation render (issue #176): Tier 1 "Sources cited" (visible by
 // default) when any chunk has is_cited=true; Tier 2 "All sources consulted"
 // uses the existing toggle. Falls back to the legacy flat list when no chunk

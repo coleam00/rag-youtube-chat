@@ -154,8 +154,12 @@ async def _post_message(*, answer_tokens: list[str], retrieved_chunks: list[dict
 
 
 def _parse_sources(body: str) -> list[dict]:
-    idx = body.index("event: sources")
-    return cast(list[dict], json.loads(body[idx:].split("\n", 2)[1][len("data: ") :]))
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if line == "event: sources":
+            payload = lines[i + 1].removeprefix("data: ")
+            return cast(list[dict], json.loads(payload))
+    return []
 
 
 def _chunk(cid: str, vid: str = "v1") -> dict:
