@@ -154,7 +154,8 @@ async def _post_message(*, answer_tokens: list[str], retrieved_chunks: list[dict
 
 def _parse_sources(body: str) -> list[dict[str, object]]:
     idx = body.index("event: sources")
-    result: list[dict[str, object]] = json.loads(body[idx:].split("\n", 2)[1][len("data: ") :])
+    data_line = body[idx:].split("\n", 2)[1]
+    result: list[dict[str, object]] = json.loads(data_line.removeprefix("data: "))
     return result
 
 

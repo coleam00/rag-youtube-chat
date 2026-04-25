@@ -173,7 +173,7 @@ async def _hydrate_chunks(raw_chunks: list[dict]) -> list[dict]:
     if not raw_chunks:
         return []
 
-    unique_ids = list({c.get("video_id", "") for c in raw_chunks if c.get("video_id")})
+    unique_ids = {c.get("video_id", "") for c in raw_chunks if c.get("video_id")}
 
     async def _load(vid: str) -> tuple[str, dict[str, str]]:
         try:

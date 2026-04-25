@@ -202,10 +202,8 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
   const filteredVideos = q
     ? videos.filter((v) =>
         [v.title, v.channel_title, v.description]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(q),
+          .filter((f): f is string => Boolean(f))
+          .some((field) => field.toLowerCase().includes(q)),
       )
     : videos;
 
