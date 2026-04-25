@@ -1,6 +1,25 @@
+import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { type Video, getVideos, ingestVideo } from '../lib/api';
+
+// ── Highlight matched substring in a video title ─────────────────
+function highlightMatch(title: string, query: string): string | React.ReactElement {
+  if (!title) return title;
+  const q = query.trim();
+  if (!q) return title;
+  const idx = title.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return title;
+  return (
+    <>
+      {title.slice(0, idx)}
+      <mark className="bg-blue-500/35 text-inherit p-0 rounded-sm">
+        {title.slice(idx, idx + q.length)}
+      </mark>
+      {title.slice(idx + q.length)}
+    </>
+  );
+}
 
 // ── Skeleton card ────────────────────────────────────────────────
 function SkeletonCard() {
@@ -14,7 +33,7 @@ function SkeletonCard() {
 }
 
 // ── Video card ───────────────────────────────────────────────────
-function VideoCard({ video }: { video: Video }) {
+function VideoCard({ video, query = '' }: { video: Video; query?: string }) {
   return (
     <div
       className="bg-slate-800 border border-white/10 rounded-lg p-3.5 transition-colors duration-150"
@@ -22,7 +41,9 @@ function VideoCard({ video }: { video: Video }) {
       onMouseLeave={(e) => e.currentTarget.classList.remove('video-card-hover')}
     >
       {/* Title */}
-      <p className="text-sm font-semibold text-slate-100 mb-1.5 leading-tight">{video.title}</p>
+      <p className="text-sm font-semibold text-slate-100 mb-1.5 leading-tight">
+        {highlightMatch(video.title, query)}
+      </p>
 
       {/* Description / channel attribution */}
       {video.channel_title ? (
@@ -105,6 +126,8 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
   });
   const [ingesting, setIngesting] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   const closeDialog = () => {
     setIngestOpen(false);
@@ -151,6 +174,20 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
     }
   }, [isOpen, videos.length, loading, error, fetchVideos]);
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset search state when panel closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+      setDebouncedQuery('');
+    }
+  }, [isOpen]);
+
   // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -160,6 +197,17 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
+
+  const q = debouncedQuery.trim().toLowerCase();
+  const filteredVideos = q
+    ? videos.filter((v) =>
+        [v.title, v.channel_title, v.description]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      )
+    : videos;
 
   return (
     <>
@@ -180,7 +228,9 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
             <h2 className="m-0 text-base font-semibold text-slate-100">Video Library</h2>
             {!loading && videos.length > 0 && (
               <p className="mt-0.5 text-xs text-slate-400">
-                {videos.length} videos in knowledge base
+                {q
+                  ? `${filteredVideos.length} of ${videos.length} videos`
+                  : `${videos.length} videos in knowledge base`}
               </p>
             )}
           </div>
@@ -220,6 +270,20 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
             </button>
           )}
         </div>
+
+        {/* Search */}
+        {!loading && !error && videos.length > 0 && (
+          <div className="px-5 py-3 border-b border-white/10 flex-shrink-0">
+            <input
+              type="search"
+              placeholder="Search videos…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full p-2 bg-slate-900 border border-white/10 rounded-md text-slate-100 text-sm box-border outline-none focus:border-blue-500 transition-colors"
+              aria-label="Search videos"
+            />
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-2.5">
@@ -264,7 +328,17 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
             </div>
           )}
 
-          {!loading && !error && videos.map((video) => <VideoCard key={video.id} video={video} />)}
+          {!loading && !error && videos.length > 0 && filteredVideos.length === 0 && (
+            <div className="py-8 text-center text-slate-500 text-sm">
+              No videos match &ldquo;{debouncedQuery}&rdquo;
+            </div>
+          )}
+
+          {!loading &&
+            !error &&
+            filteredVideos.map((video) => (
+              <VideoCard key={video.id} video={video} query={debouncedQuery} />
+            ))}
         </div>
 
         {/* Ingest dialog */}
