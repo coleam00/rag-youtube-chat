@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -26,9 +27,7 @@ class TestParsing:
         assert extract_cited_chunk_ids(text) == {"abc", "550e8400-e29b-41d4"}
 
     def test_strip_removes_markers_preserves_other_brackets(self) -> None:
-        assert strip_citation_markers("see [docs](url) [c:a][c:b] end") == (
-            "see [docs](url)  end"
-        )
+        assert strip_citation_markers("see [docs](url) [c:a][c:b] end") == ("see [docs](url)  end")
 
 
 # Stream-safe stripping --------------------------------------------------
@@ -96,9 +95,7 @@ class TestStreamStripper:
 # Full SSE integration through the messages route -----------------------
 
 
-async def _post_message(
-    *, answer_tokens: list[str], retrieved_chunks: list[dict]
-) -> str:
+async def _post_message(*, answer_tokens: list[str], retrieved_chunks: list[dict]) -> str:
     """Post one chat message and return the SSE body. Mocks LLM + DB."""
     test_user_id = str(uuid4())
     test_conv_id = str(uuid4())
@@ -158,7 +155,7 @@ async def _post_message(
 
 def _parse_sources(body: str) -> list[dict]:
     idx = body.index("event: sources")
-    return json.loads(body[idx:].split("\n", 2)[1][len("data: ") :])
+    return cast(list[dict], json.loads(body[idx:].split("\n", 2)[1][len("data: ") :]))
 
 
 def _chunk(cid: str, vid: str = "v1") -> dict:
