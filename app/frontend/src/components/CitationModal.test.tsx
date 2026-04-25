@@ -36,10 +36,11 @@ describe('CitationModal', () => {
     expect(iframe.src).toContain('autoplay=1');
   });
 
-  it('shows transcript snippet', () => {
+  it('shows transcript snippet with heading', () => {
     const onClose = vi.fn();
     render(<CitationModal citation={mockCitation} onClose={onClose} />);
 
+    expect(screen.getByText('Transcript Excerpt')).toBeInTheDocument();
     expect(
       screen.getByText(
         'This is a sample transcript snippet that appears in the video at the cited moment.',
