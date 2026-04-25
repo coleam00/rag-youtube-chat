@@ -92,7 +92,7 @@ export function Signup() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-2 rounded bg-[var(--accent)] text-white font-medium disabled:opacity-50"
+          className="w-full py-2 rounded bg-[var(--accent)] text-white font-medium disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
         >
           {submitting ? 'Creating account…' : 'Sign up'}
         </button>

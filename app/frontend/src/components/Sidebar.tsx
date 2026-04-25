@@ -115,6 +115,7 @@ function ConvItem({
       onKeyDown={(e) => e.key === 'Enter' && !editing && onSelect()}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
       style={{
         position: 'relative',
         padding: '10px 16px',
@@ -123,7 +124,7 @@ function ConvItem({
         background: isActive ? '#1e293b' : hovered ? 'rgba(30,41,59,0.6)' : 'transparent',
         borderLeft: isActive ? '3px solid #3b82f6' : '3px solid transparent',
         paddingLeft: 13,
-        transition: 'background 0.15s',
+        transition: 'background 0.15s, border-color 0.15s',
         userSelect: 'none',
       }}
     >
@@ -206,6 +207,7 @@ function ConvItem({
           }}
           aria-label="Rename conversation"
           title="Rename conversation"
+          className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
           style={{
             position: 'absolute',
             right: 30,
@@ -237,6 +239,7 @@ function ConvItem({
             onDeleteRequest(conv.id);
           }}
           title="Delete conversation"
+          className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
           style={{
             position: 'absolute',
             right: 10,
@@ -304,6 +307,7 @@ function ConfirmDialog({ onConfirm, onCancel, deleting, error }: ConfirmDialogPr
           padding: 24,
           width: 320,
           maxWidth: 'calc(100vw - 48px)',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
         }}
       >
         <p style={{ margin: '0 0 8px', fontWeight: 600, color: '#f1f5f9' }}>Delete conversation?</p>
@@ -318,6 +322,7 @@ function ConfirmDialog({ onConfirm, onCancel, deleting, error }: ConfirmDialogPr
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
             onClick={onCancel}
+            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.15)',
@@ -333,6 +338,7 @@ function ConfirmDialog({ onConfirm, onCancel, deleting, error }: ConfirmDialogPr
           <button
             onClick={onConfirm}
             disabled={deleting}
+            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               background: '#ef4444',
               border: 'none',
@@ -524,6 +530,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
           <button
             onClick={handleNewChat}
             disabled={creatingNew}
+            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none focus-visible:shadow-[0_0_12px_var(--accent-glow)]"
             style={{
               width: '100%',
               background: '#3b82f6',
@@ -539,10 +546,17 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              transition: 'background 0.15s',
+              transition: 'background 0.15s, filter 0.15s',
             }}
             onMouseEnter={(e) => !creatingNew && (e.currentTarget.style.background = '#1d4ed8')}
-            onMouseLeave={(e) => !creatingNew && (e.currentTarget.style.background = '#3b82f6')}
+            onMouseLeave={(e) => {
+              if (!creatingNew) {
+                e.currentTarget.style.background = '#3b82f6';
+                e.currentTarget.style.filter = 'brightness(1)';
+              }
+            }}
+            onMouseDown={(e) => !creatingNew && (e.currentTarget.style.filter = 'brightness(0.9)')}
+            onMouseUp={(e) => !creatingNew && (e.currentTarget.style.filter = 'brightness(1)')}
           >
             <svg
               width="14"
@@ -573,6 +587,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -627,6 +642,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
                   <p style={{ margin: 0, fontSize: 13 }}>No conversations yet</p>
                   <button
                     onClick={handleNewChat}
+                    className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                     style={{
                       marginTop: 10,
                       background: 'transparent',
@@ -636,12 +652,17 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
                       cursor: 'pointer',
                       fontSize: 13,
                       padding: '7px 16px',
-                      transition: 'background 0.15s',
+                      transition: 'background 0.15s, filter 0.15s',
                     }}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.background = 'rgba(59,130,246,0.1)')
                     }
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.filter = 'brightness(1)';
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.filter = 'brightness(0.9)')}
+                    onMouseUp={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
                   >
                     Start your first chat →
                   </button>
@@ -703,6 +724,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
               disabled={loggingOut}
               title="Log out"
               aria-label="Log out"
+              className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               style={{
                 background: 'transparent',
                 border: '1px solid rgba(255,255,255,0.08)',
@@ -751,6 +773,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
             <Link
               to="/admin"
               title="Manage video library"
+              className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               style={{
                 fontSize: 12,
                 color: '#94a3b8',
@@ -780,6 +803,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
             onClick={() => setExplorerOpen(true)}
             title="Browse video library"
             aria-label="Browse video library"
+            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               background: 'transparent',
               border: '1px solid rgba(255,255,255,0.08)',

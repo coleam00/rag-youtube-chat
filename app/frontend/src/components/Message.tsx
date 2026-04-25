@@ -49,6 +49,7 @@ function citationChip(
       key={`${citation.chunk_id}-${i}`}
       onClick={() => onCitationClick?.(citation)}
       title={`${citation.video_title} at ${formatTimestamp(citation.start_seconds)}\n${citation.snippet}`}
+      className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
       style={{
         display: 'inline-block',
         padding: '3px 10px',
@@ -102,6 +103,7 @@ function SourceCitations({
       {(!showTwoTier || consulted.length > 0) && (
         <button
           onClick={() => setExpanded((v) => !v)}
+          className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
           style={{
             background: 'transparent',
             border: 'none',
@@ -183,6 +185,7 @@ export function Message({
           padding: '12px 16px',
           lineHeight: 1.7,
           wordBreak: 'break-word',
+          borderLeft: isUser ? '2px solid var(--text-tertiary)' : '2px solid var(--accent)',
         }}
       >
         {isStreaming && !content ? (

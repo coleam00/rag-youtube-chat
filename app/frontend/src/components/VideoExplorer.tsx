@@ -187,7 +187,7 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
           <button
             onClick={onClose}
             aria-label="Close video library"
-            className="bg-transparent border border-white/10 rounded-lg text-slate-400 cursor-pointer p-2 flex items-center justify-center transition-colors duration-150 mr-2"
+            className="bg-transparent border border-white/10 rounded-lg text-slate-400 cursor-pointer p-2 flex items-center justify-center transition-colors duration-150 mr-2 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             onMouseEnter={(e) => {
               e.currentTarget.classList.remove('text-slate-400', 'bg-transparent');
               e.currentTarget.classList.add('text-slate-100', 'bg-slate-800');
@@ -213,7 +213,7 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
           {user?.is_admin && (
             <button
               onClick={() => setIngestOpen(true)}
-              className="px-3 py-1.5 bg-blue-500 border-none rounded-md text-white text-sm cursor-pointer"
+              className="px-3 py-1.5 bg-blue-500 border-none rounded-md text-white text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               title="Add new video"
             >
               + Add Video
@@ -251,7 +251,7 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
               <p className="m-0 text-slate-600 text-xs">{error}</p>
               <button
                 onClick={fetchVideos}
-                className="bg-slate-800 border border-white/10 rounded-lg text-slate-100 cursor-pointer px-5 py-2 text-sm"
+                className="bg-slate-800 border border-white/10 rounded-lg text-slate-100 cursor-pointer px-5 py-2 text-sm focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               >
                 Retry
               </button>
@@ -270,12 +270,12 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
         {/* Ingest dialog */}
         {ingestOpen && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-            <div className="bg-slate-800 border border-white/10 rounded-xl p-6 w-[420px] max-w-[calc(100vw-48px)]">
+            <div className="bg-slate-800 border border-white/10 rounded-xl p-6 w-[420px] max-w-[calc(100vw-48px)] shadow-2xl">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-slate-100 text-base font-semibold m-0">Add New Video</h3>
                 <button
                   onClick={closeDialog}
-                  className="bg-none border-none text-slate-400 cursor-pointer text-lg"
+                  className="bg-none border-none text-slate-400 cursor-pointer text-lg focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                 >
                   ×
                 </button>
@@ -310,14 +310,14 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
               <div className="flex gap-2 justify-end mt-4">
                 <button
                   onClick={closeDialog}
-                  className="px-4 py-2 bg-transparent border border-white/20 rounded-md text-slate-400 text-sm cursor-pointer"
+                  className="px-4 py-2 bg-transparent border border-white/20 rounded-md text-slate-400 text-sm cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleIngest}
                   disabled={ingesting}
-                  className="px-4 py-2 bg-blue-500 border-none rounded-md text-white text-sm cursor-pointer disabled:opacity-75"
+                  className="px-4 py-2 bg-blue-500 border-none rounded-md text-white text-sm cursor-pointer disabled:opacity-75 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                 >
                   {ingesting ? 'Adding…' : 'Add Video'}
                 </button>
