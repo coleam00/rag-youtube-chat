@@ -86,6 +86,78 @@ async def test_search_conversations_no_matches():
     assert results == []
 
 
+async def test_list_conversations_excludes_empty():
+    """list_conversations must omit conversations with zero messages.
+
+    Regression for issue #173: empty 'New Conversation' rows from eager
+    create-on-click must not appear in the sidebar list.
+    """
+    from backend.db.repository import create_message, list_conversations
+
+    user_id = str(uuid4())
+    empty = await create_conversation(user_id=user_id, title="Empty One")
+    nonempty = await create_conversation(user_id=user_id, title="Real Chat")
+    await create_message(
+        conversation_id=nonempty["id"],
+        user_id=user_id,
+        role="user",
+        content="hello",
+    )
+
+    results = await list_conversations(user_id)
+    ids = {c["id"] for c in results}
+    assert nonempty["id"] in ids
+    assert empty["id"] not in ids
+
+
+async def test_list_conversations_includes_after_first_message():
+    """A newly-created conversation appears in the list as soon as the first
+    message is persisted (acceptance criterion from issue #173)."""
+    from backend.db.repository import create_message, list_conversations
+
+    user_id = str(uuid4())
+    conv = await create_conversation(user_id=user_id, title="Will get a message")
+
+    # Before message: not in list
+    assert conv["id"] not in {c["id"] for c in await list_conversations(user_id)}
+
+    await create_message(
+        conversation_id=conv["id"],
+        user_id=user_id,
+        role="user",
+        content="first message",
+    )
+
+    # After message: in list
+    assert conv["id"] in {c["id"] for c in await list_conversations(user_id)}
+
+
+async def test_search_conversations_excludes_empty():
+    """search_conversations_by_title must omit empty conversations even when
+    their default 'New Conversation' title matches the query.
+
+    Regression for issue #173 acceptance: 'Existing conversation-search
+    behavior unchanged for conversations that have messages.'
+    """
+    from backend.db.repository import create_message
+
+    user_id = str(uuid4())
+    # Default title for both — only the one with a message should match.
+    empty = await create_conversation(user_id=user_id)  # title='New Conversation'
+    nonempty = await create_conversation(user_id=user_id, title="New idea")
+    await create_message(
+        conversation_id=nonempty["id"],
+        user_id=user_id,
+        role="user",
+        content="seeded",
+    )
+
+    results = await search_conversations_by_title(user_id, "new")
+    ids = {r["id"] for r in results}
+    assert nonempty["id"] in ids
+    assert empty["id"] not in ids
+
+
 async def test_search_videos_admin_case_insensitive():
     """Search should be case-insensitive using ILIKE."""
     await create_video(

@@ -425,6 +425,7 @@ async def list_conversations(user_id: str) -> list[dict]:
                     LIMIT 1) AS preview
             FROM conversations c
             WHERE c.user_id = $1
+              AND EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id)
             ORDER BY c.updated_at DESC
             """,
             user_id,
@@ -471,6 +472,9 @@ async def search_conversations_by_title(user_id: str, query: str, limit: int = 2
 
     Ported from the SQLite era: uses ILIKE in Postgres so the match is
     case-insensitive in one step (no need to lower() both sides).
+
+    Empty conversations (no messages) are excluded — they shouldn't be visible
+    to the user even if their default 'New Conversation' title matches a query.
     """
     pattern = f"%{query}%"
     async with _acquire() as conn:
@@ -478,7 +482,9 @@ async def search_conversations_by_title(user_id: str, query: str, limit: int = 2
             """
             SELECT id, title, created_at, updated_at
             FROM conversations
-            WHERE user_id = $1 AND title ILIKE $2
+            WHERE user_id = $1
+              AND title ILIKE $2
+              AND EXISTS (SELECT 1 FROM messages WHERE conversation_id = id)
             ORDER BY updated_at DESC
             LIMIT $3
             """,
