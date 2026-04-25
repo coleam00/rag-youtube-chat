@@ -168,8 +168,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               if (!isDisabled) e.currentTarget.style.background = '#1d4ed8';
             }}
             onMouseLeave={(e) => {
-              if (!isDisabled) e.currentTarget.style.background = '#3b82f6';
-              if (!isDisabled) e.currentTarget.style.filter = '';
+              if (!isDisabled) {
+                e.currentTarget.style.background = '#3b82f6';
+                e.currentTarget.style.filter = '';
+              }
             }}
             onMouseDown={(e) => {
               if (!isDisabled) e.currentTarget.style.filter = 'brightness(0.9)';
