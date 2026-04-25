@@ -138,15 +138,13 @@ export function AdminVideos() {
           </button>
         </div>
 
-        <div className="mb-3">
-          <input
-            type="text"
-            placeholder="Search videos..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-[var(--surface-1)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none transition-colors focus:border-blue-500"
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Search videos..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 mb-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none transition-colors focus:border-blue-500"
+        />
 
         <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg overflow-hidden">
           {loading ? (
