@@ -200,7 +200,13 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
 
   const q = debouncedQuery.trim().toLowerCase();
   const filteredVideos = q
-    ? videos.filter((v) => (v.title ?? '').toLowerCase().includes(q))
+    ? videos.filter((v) =>
+        [v.title, v.channel_title, v.description]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      )
     : videos;
 
   return (
@@ -222,7 +228,9 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
             <h2 className="m-0 text-base font-semibold text-slate-100">Video Library</h2>
             {!loading && videos.length > 0 && (
               <p className="mt-0.5 text-xs text-slate-400">
-                {videos.length} videos in knowledge base
+                {q
+                  ? `${filteredVideos.length} of ${videos.length} videos`
+                  : `${videos.length} videos in knowledge base`}
               </p>
             )}
           </div>

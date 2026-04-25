@@ -480,6 +480,68 @@ describe('VideoExplorer', () => {
       expect(screen.queryByText('React Hooks Deep Dive')).not.toBeInTheDocument();
     });
 
+    it('shows "X of Y videos" filtered count in header when search is active', async () => {
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        { id: '1', title: 'React Hooks Deep Dive', description: '', url: '', created_at: '' },
+        { id: '2', title: 'TypeScript Tips', description: '', url: '', created_at: '' },
+        { id: '3', title: 'Vue Basics', description: '', url: '', created_at: '' },
+      ]);
+      render(<VideoExplorer isOpen={true} onClose={vi.fn()} />);
+      await waitFor(() =>
+        expect(screen.getByText('3 videos in knowledge base')).toBeInTheDocument(),
+      );
+
+      fireEvent.change(screen.getByLabelText('Search videos'), { target: { value: 'typescript' } });
+      await waitFor(() => expect(screen.getByText('1 of 3 videos')).toBeInTheDocument(), {
+        timeout: 1000,
+      });
+    });
+
+    it('matches against channel_title and description in addition to title', async () => {
+      vi.spyOn(api, 'getVideos').mockResolvedValueOnce([
+        {
+          id: '1',
+          title: 'Episode 4',
+          description: '',
+          url: '',
+          created_at: '',
+          channel_title: 'Cole Medin',
+        },
+        {
+          id: '2',
+          title: 'Episode 5',
+          description: 'Deep dive on retrieval augmented generation',
+          url: '',
+          created_at: '',
+        },
+        {
+          id: '3',
+          title: 'Episode 6',
+          description: 'Unrelated content',
+          url: '',
+          created_at: '',
+        },
+      ]);
+      render(<VideoExplorer isOpen={true} onClose={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText('Episode 4')).toBeInTheDocument());
+
+      // Match by channel_title
+      const input = screen.getByLabelText('Search videos');
+      fireEvent.change(input, { target: { value: 'cole' } });
+      await waitFor(() => expect(screen.queryByText('Episode 5')).not.toBeInTheDocument(), {
+        timeout: 1000,
+      });
+      expect(screen.getByText('Episode 4')).toBeInTheDocument();
+
+      // Match by description
+      fireEvent.change(input, { target: { value: 'retrieval' } });
+      await waitFor(() => expect(screen.getByText('Episode 5')).toBeInTheDocument(), {
+        timeout: 1000,
+      });
+      expect(screen.queryByText('Episode 4')).not.toBeInTheDocument();
+      expect(screen.queryByText('Episode 6')).not.toBeInTheDocument();
+    });
+
     it('resets search state when panel closes and reopens', async () => {
       vi.spyOn(api, 'getVideos').mockResolvedValue([
         { id: '1', title: 'React Hooks Deep Dive', description: '', url: '', created_at: '' },
