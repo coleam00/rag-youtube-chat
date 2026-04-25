@@ -530,7 +530,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
           <button
             onClick={handleNewChat}
             disabled={creatingNew}
-            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none focus-visible:shadow-[0_0_12px_var(--accent-glow)]"
+            className="active:brightness-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none focus-visible:shadow-[0_0_12px_var(--accent-glow)]"
             style={{
               width: '100%',
               background: '#3b82f6',
@@ -552,11 +552,8 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
             onMouseLeave={(e) => {
               if (!creatingNew) {
                 e.currentTarget.style.background = '#3b82f6';
-                e.currentTarget.style.filter = 'brightness(1)';
               }
             }}
-            onMouseDown={(e) => !creatingNew && (e.currentTarget.style.filter = 'brightness(0.9)')}
-            onMouseUp={(e) => !creatingNew && (e.currentTarget.style.filter = 'brightness(1)')}
           >
             <svg
               width="14"
@@ -642,7 +639,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
                   <p style={{ margin: 0, fontSize: 13 }}>No conversations yet</p>
                   <button
                     onClick={handleNewChat}
-                    className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+                    className="active:brightness-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
                     style={{
                       marginTop: 10,
                       background: 'transparent',
@@ -659,10 +656,7 @@ export function Sidebar({ activeConversationId, isOpen, onClose, conversationsRe
                     }
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.filter = 'brightness(1)';
                     }}
-                    onMouseDown={(e) => (e.currentTarget.style.filter = 'brightness(0.9)')}
-                    onMouseUp={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
                   >
                     Start your first chat →
                   </button>

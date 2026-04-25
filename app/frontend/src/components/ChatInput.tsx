@@ -120,7 +120,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <button
             onClick={onStop}
             aria-label="Stop response"
-            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+            className="active:brightness-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               background: '#dc2626',
               border: 'none',
@@ -135,9 +135,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               width: 34,
               transition: 'background 0.15s, filter 0.15s',
             }}
-            onMouseDown={(e) => (e.currentTarget.style.filter = 'brightness(0.9)')}
-            onMouseUp={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
-            onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
               <rect x="1" y="1" width="10" height="10" rx="1" />
@@ -148,7 +145,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             onClick={handleSend}
             disabled={isDisabled}
             aria-label="Send message"
-            className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+            className="active:brightness-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             style={{
               background: isDisabled ? '#1e293b' : '#3b82f6',
               border: 'none',
@@ -167,16 +164,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               if (!isDisabled) e.currentTarget.style.background = '#1d4ed8';
             }}
             onMouseLeave={(e) => {
-              if (!isDisabled) {
-                e.currentTarget.style.background = '#3b82f6';
-                e.currentTarget.style.filter = 'brightness(1)';
-              }
-            }}
-            onMouseDown={(e) => {
-              if (!isDisabled) e.currentTarget.style.filter = 'brightness(0.9)';
-            }}
-            onMouseUp={(e) => {
-              if (!isDisabled) e.currentTarget.style.filter = 'brightness(1)';
+              if (!isDisabled) e.currentTarget.style.background = '#3b82f6';
             }}
           >
             <svg

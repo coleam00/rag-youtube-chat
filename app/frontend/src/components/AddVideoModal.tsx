@@ -90,10 +90,7 @@ export function AddVideoModal({ open, onClose, onSubmit }: AddVideoModalProps) {
           <button
             type="submit"
             disabled={submitting || !url.trim()}
-            className="px-3 py-2 rounded bg-[var(--accent)] text-white font-medium disabled:opacity-50 transition-[filter] duration-150 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
-            onMouseDown={(e) => (e.currentTarget.style.filter = 'brightness(0.9)')}
-            onMouseUp={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
-            onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1)')}
+            className="px-3 py-2 rounded bg-[var(--accent)] text-white font-medium disabled:opacity-50 transition-[filter] duration-150 active:brightness-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
           >
             {submitting ? 'Adding…' : 'Add video'}
           </button>
