@@ -480,12 +480,12 @@ async def search_conversations_by_title(user_id: str, query: str, limit: int = 2
     async with _acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT id, title, created_at, updated_at
-            FROM conversations
-            WHERE user_id = $1
-              AND title ILIKE $2
-              AND EXISTS (SELECT 1 FROM messages WHERE conversation_id = id)
-            ORDER BY updated_at DESC
+            SELECT c.id, c.title, c.created_at, c.updated_at
+            FROM conversations c
+            WHERE c.user_id = $1
+              AND c.title ILIKE $2
+              AND EXISTS (SELECT 1 FROM messages WHERE conversation_id = c.id)
+            ORDER BY c.updated_at DESC
             LIMIT $3
             """,
             user_id,

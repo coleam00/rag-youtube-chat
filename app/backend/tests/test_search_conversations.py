@@ -158,6 +158,107 @@ async def test_search_conversations_excludes_empty():
     assert empty["id"] not in ids
 
 
+async def test_list_conversations_scopes_and_excludes_empty():
+    """Cross-user scoping must still hold with the empty-conversation filter.
+
+    Regression guard: if a future refactor extracts the EXISTS subquery into
+    a CTE / view and accidentally drops the outer ``c.user_id = $1`` clause,
+    one user could see another user's non-empty conversations. Lock the
+    invariant down with a two-user fixture.
+    """
+    from backend.db.repository import create_message, list_conversations
+
+    alice_id = str(uuid4())
+    bob_id = str(uuid4())
+
+    # Alice: one empty, one with a message
+    alice_empty = await create_conversation(user_id=alice_id, title="Alice Empty")
+    alice_real = await create_conversation(user_id=alice_id, title="Alice Real")
+    await create_message(
+        conversation_id=alice_real["id"],
+        user_id=alice_id,
+        role="user",
+        content="hi",
+    )
+
+    # Bob: one empty, one with a message
+    bob_empty = await create_conversation(user_id=bob_id, title="Bob Empty")
+    bob_real = await create_conversation(user_id=bob_id, title="Bob Real")
+    await create_message(
+        conversation_id=bob_real["id"],
+        user_id=bob_id,
+        role="user",
+        content="hey",
+    )
+
+    alice_ids = {c["id"] for c in await list_conversations(alice_id)}
+    assert alice_real["id"] in alice_ids
+    assert alice_empty["id"] not in alice_ids
+    assert bob_real["id"] not in alice_ids
+    assert bob_empty["id"] not in alice_ids
+
+    bob_ids = {c["id"] for c in await list_conversations(bob_id)}
+    assert bob_real["id"] in bob_ids
+    assert bob_empty["id"] not in bob_ids
+    assert alice_real["id"] not in bob_ids
+    assert alice_empty["id"] not in bob_ids
+
+
+async def test_list_conversations_ordering_with_empty_filtered():
+    """``updated_at DESC`` ordering is preserved after the EXISTS filter
+    removes empty conversations.
+
+    Regression guard: ensures a future query-plan change (e.g. an added
+    index on messages.conversation_id) does not silently lose the sort.
+    """
+    import asyncio
+
+    from backend.db.repository import create_message, list_conversations
+
+    user_id = str(uuid4())
+    conv1 = await create_conversation(user_id=user_id, title="First")
+    await asyncio.sleep(0.01)
+    conv2 = await create_conversation(user_id=user_id, title="Second")  # stays empty
+    await asyncio.sleep(0.01)
+    conv3 = await create_conversation(user_id=user_id, title="Third")
+
+    # Seed messages on conv1 and conv3 (conv2 stays empty and must drop out).
+    await create_message(conversation_id=conv1["id"], user_id=user_id, role="user", content="a")
+    await asyncio.sleep(0.01)
+    await create_message(conversation_id=conv3["id"], user_id=user_id, role="user", content="c")
+
+    ids = [c["id"] for c in await list_conversations(user_id)]
+    # conv2 excluded; conv3 most recently updated, so it leads.
+    assert ids == [conv3["id"], conv1["id"]]
+    assert conv2["id"] not in ids
+
+
+async def test_search_conversations_empty_query_excludes_empty():
+    """Empty search query (`''` → `'%%'` pattern) must still exclude
+    conversations with no messages.
+
+    Edge case: an empty query causes ILIKE to match every title, so the
+    EXISTS filter is the only thing keeping default 'New Conversation'
+    rows out of the result set.
+    """
+    from backend.db.repository import create_message
+
+    user_id = str(uuid4())
+    empty = await create_conversation(user_id=user_id, title="Empty One")
+    nonempty = await create_conversation(user_id=user_id, title="Real Chat")
+    await create_message(
+        conversation_id=nonempty["id"],
+        user_id=user_id,
+        role="user",
+        content="seed",
+    )
+
+    results = await search_conversations_by_title(user_id, "")
+    ids = {r["id"] for r in results}
+    assert nonempty["id"] in ids
+    assert empty["id"] not in ids
+
+
 async def test_search_videos_admin_case_insensitive():
     """Search should be case-insensitive using ILIKE."""
     await create_video(
