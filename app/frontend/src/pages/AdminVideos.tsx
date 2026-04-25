@@ -11,11 +11,11 @@ import { Link, Navigate } from 'react-router-dom';
 import { AddVideoModal } from '../components/AddVideoModal';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
+import { useAdminVideos } from '../hooks/useAdminVideos';
 import {
   type AdminVideo,
   addVideoByUrl,
   deleteVideo,
-  listAdminVideos,
   resyncVideo,
   syncChannel,
 } from '../lib/api';
@@ -23,29 +23,18 @@ import {
 export function AdminVideos() {
   const { status, user } = useAuth();
   const { addToast } = useToast();
-  const [videos, setVideos] = useState<AdminVideo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const { videos, loading, refetch } = useAdminVideos(debouncedQuery);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await listAdminVideos();
-      setVideos(res.videos);
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to load videos', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
-
+  // Debounce search query — 250ms per issue #92 pattern
   useEffect(() => {
-    if (status === 'authed' && user?.is_admin) {
-      refresh();
-    }
-  }, [status, user?.is_admin, refresh]);
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Guard rendering
   if (status === 'loading') {
@@ -65,7 +54,7 @@ export function AdminVideos() {
   async function handleAdd(url: string) {
     const res = await addVideoByUrl(url);
     addToast(`Added video (${res.chunks_created} chunks)`, 'success');
-    await refresh();
+    await refetch();
   }
 
   async function handleDelete(video: AdminVideo) {
@@ -76,7 +65,7 @@ export function AdminVideos() {
     try {
       await deleteVideo(video.id);
       addToast('Video deleted', 'success');
-      await refresh();
+      await refetch();
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Delete failed', 'error');
     } finally {
@@ -89,7 +78,7 @@ export function AdminVideos() {
     try {
       const res = await resyncVideo(video.id);
       addToast(`Re-synced (${res.chunks_created} chunks)`, 'success');
-      await refresh();
+      await refetch();
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Re-sync failed', 'error');
     } finally {
@@ -105,7 +94,7 @@ export function AdminVideos() {
         `Channel sync ${res.status}: ${res.videos_new} new, ${res.videos_error} errors`,
         res.status === 'completed' ? 'success' : 'error',
       );
-      await refresh();
+      await refetch();
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Channel sync failed', 'error');
     } finally {
@@ -147,7 +136,7 @@ export function AdminVideos() {
           </button>
           <button
             type="button"
-            onClick={refresh}
+            onClick={refetch}
             disabled={loading || syncing}
             className="px-3 py-2 rounded border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
           >
@@ -155,12 +144,36 @@ export function AdminVideos() {
           </button>
         </div>
 
+        <div style={{ marginBottom: 12 }}>
+          <input
+            type="text"
+            placeholder="Search videos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#1e293b',
+              border: '1px solid #334155',
+              color: '#f1f5f9',
+              fontSize: 13,
+              outline: 'none',
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = '#3b82f6')}
+            onBlur={(e) => (e.currentTarget.style.borderColor = '#334155')}
+          />
+        </div>
+
         <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg overflow-hidden">
           {loading ? (
             <div className="p-6 text-center text-[var(--text-secondary)]">Loading…</div>
           ) : videos.length === 0 ? (
             <div className="p-6 text-center text-[var(--text-secondary)]">
-              No videos yet. Add one by URL or sync a channel.
+              {debouncedQuery.trim()
+                ? `No matches for "${debouncedQuery}"`
+                : 'No videos yet. Add one by URL or sync a channel.'}
             </div>
           ) : (
             <table className="w-full text-sm">

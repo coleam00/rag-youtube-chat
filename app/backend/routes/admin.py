@@ -209,6 +209,30 @@ async def add_video(body: AddVideoRequest) -> AddVideoResponse:
     return AddVideoResponse(video_id=video_id, chunks_created=len(chunks), status="ok")
 
 
+@router.get("/videos/search", response_model=AdminVideosResponse)
+async def search_videos_admin(q: str) -> AdminVideosResponse:
+    """Title-contains search for the admin video library.
+
+    Must be declared BEFORE /admin/videos/{video_id} or FastAPI routes
+    "search" to the path-parameter handler and returns 404.
+    """
+    rows = await repo.search_videos_admin(q)
+    videos = [
+        AdminVideo(
+            id=r["id"],
+            title=r["title"],
+            description=r["description"],
+            url=r["url"],
+            created_at=str(r["created_at"]),
+            chunk_count=int(r["chunk_count"]),
+            channel_id=r.get("channel_id"),
+            channel_title=r.get("channel_title"),
+        )
+        for r in rows
+    ]
+    return AdminVideosResponse(videos=videos)
+
+
 @router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_video(video_id: str) -> None:
     """Delete a video and cascade its chunks. 404 if not found."""

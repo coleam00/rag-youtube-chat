@@ -318,6 +318,25 @@ async def list_videos_admin() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def search_videos_admin(q: str, limit: int = 20) -> list[dict]:
+    """Videos with chunk_count where title/description/channel_title contains substring (case-insensitive)."""
+    pattern = f"%{q}%"
+    async with _acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT v.id, v.title, v.description, v.url, v.created_at, v.channel_id, v.channel_title,
+                   (SELECT COUNT(*) FROM chunks c WHERE c.video_id = v.id) AS chunk_count
+            FROM videos v
+            WHERE v.title ILIKE $1 OR v.description ILIKE $1 OR v.channel_title ILIKE $1
+            ORDER BY v.created_at DESC
+            LIMIT $2
+            """,
+            pattern,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
 async def delete_video_cascade(video_id: str) -> bool:
     """Delete a video and its chunks (FK ON DELETE CASCADE). Returns False if not found."""
     async with _acquire() as conn:

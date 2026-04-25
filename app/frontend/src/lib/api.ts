@@ -157,6 +157,9 @@ export interface SyncChannelResponse {
 
 export const listAdminVideos = () => request<AdminVideosResponse>('/admin/videos');
 
+export const searchAdminVideos = (q: string) =>
+  request<AdminVideosResponse>(`/admin/videos/search?q=${encodeURIComponent(q)}`);
+
 export const addVideoByUrl = (url: string) =>
   request<AddVideoResponse>('/admin/videos', {
     method: 'POST',

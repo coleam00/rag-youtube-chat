@@ -22,7 +22,9 @@ pytestmark = pytest.mark.skip(
 
 from backend.db.repository import (  # noqa: E402
     create_conversation,
+    create_video,
     search_conversations_by_title,
+    search_videos_admin,
 )
 
 
@@ -82,3 +84,101 @@ async def test_search_conversations_no_matches():
 
     results = await search_conversations_by_title(user_id, "javascript")
     assert results == []
+
+
+async def test_search_videos_admin_case_insensitive():
+    """Search should be case-insensitive using ILIKE."""
+    await create_video(
+        title="Docker Tutorial",
+        description="Learn Docker",
+        url="https://youtube.com/watch?v=docker1",
+        transcript="docker docker docker",
+        channel_id="ch1",
+        channel_title="DevOps Channel",
+    )
+    await create_video(
+        title="Kubernetes Guide",
+        description="Learn Kubernetes",
+        url="https://youtube.com/watch?v=k8s1",
+        transcript="k8s k8s k8s",
+        channel_id="ch2",
+        channel_title="Cloud Channel",
+    )
+    await create_video(
+        title="docker advanced",
+        description="Advanced Docker topics",
+        url="https://youtube.com/watch?v=docker2",
+        transcript="advanced docker",
+        channel_id="ch1",
+        channel_title="DevOps Channel",
+    )
+
+    results = await search_videos_admin("docker")
+    titles = {r["title"] for r in results}
+    assert titles == {"Docker Tutorial", "docker advanced"}
+
+    results = await search_videos_admin("DOCKER")
+    titles = {r["title"] for r in results}
+    assert titles == {"Docker Tutorial", "docker advanced"}
+
+
+async def test_search_videos_admin_empty_query():
+    """Empty query should return results (pattern would be %%)."""
+    await create_video(
+        title="Test Video",
+        description="A test",
+        url="https://youtube.com/watch?v=test1",
+        transcript="test test test",
+    )
+
+    results = await search_videos_admin("")
+    assert isinstance(results, list)
+
+
+async def test_search_videos_admin_limit():
+    """Search should respect the limit parameter."""
+    for i in range(5):
+        await create_video(
+            title=f"Video {i}",
+            description="Desc",
+            url=f"https://youtube.com/watch?v=v{i}",
+            transcript="transcript",
+        )
+
+    results = await search_videos_admin("Video", limit=3)
+    assert len(results) == 3
+
+
+async def test_search_videos_admin_no_matches():
+    """Search should return empty list when no matches."""
+    await create_video(
+        title="Python Tutorial",
+        description="Learn Python",
+        url="https://youtube.com/watch?v=py1",
+        transcript="python python",
+    )
+
+    results = await search_videos_admin("javascript")
+    assert results == []
+
+
+async def test_search_videos_admin_matches_description_and_channel_title():
+    """Search should match description and channel_title as well as title."""
+    await create_video(
+        title="Generic Title",
+        description="Rust Programming",
+        url="https://youtube.com/watch?v=rust1",
+        transcript="rust rust",
+        channel_id="ch1",
+        channel_title="Rust Channel",
+    )
+
+    # Match by description
+    results = await search_videos_admin("Rust Programming")
+    assert len(results) == 1
+    assert results[0]["title"] == "Generic Title"
+
+    # Match by channel_title
+    results = await search_videos_admin("Rust Channel")
+    assert len(results) == 1
+    assert results[0]["title"] == "Generic Title"
