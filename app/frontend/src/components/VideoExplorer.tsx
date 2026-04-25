@@ -189,9 +189,7 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
   }, [isOpen, onClose]);
 
   const filteredVideos = debouncedQuery.trim()
-    ? videos.filter((v) =>
-        v.title.toLowerCase().includes(debouncedQuery.trim().toLowerCase())
-      )
+    ? videos.filter((v) => v.title.toLowerCase().includes(debouncedQuery.trim().toLowerCase()))
     : videos;
 
   return (
@@ -317,9 +315,11 @@ export function VideoExplorer({ isOpen, onClose }: VideoExplorerProps) {
             </div>
           )}
 
-          {!loading && !error && filteredVideos.map((video) => (
-            <VideoCard key={video.id} video={video} query={debouncedQuery} />
-          ))}
+          {!loading &&
+            !error &&
+            filteredVideos.map((video) => (
+              <VideoCard key={video.id} video={video} query={debouncedQuery} />
+            ))}
         </div>
 
         {/* Ingest dialog */}
