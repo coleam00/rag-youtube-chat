@@ -90,8 +90,13 @@ cd app/backend && uv run ruff format --check .
 ```
 
 **If fails:**
-1. Auto-fix: `cd app/backend && uv run ruff format .`
-2. Verify: `cd app/backend && uv run ruff format --check .`
+1. Auto-fix — **scoped to files this branch modified** so we never reformat unrelated (protected) files:
+   ```bash
+   git diff --name-only origin/main -- 'app/backend/*.py' 'app/backend/**/*.py' \
+     | xargs -r uv run --project app/backend ruff format
+   ```
+   Do NOT run `uv run ruff format .` repo-wide — that has caused multiple PRs to be auto-rejected for touching protected files (e.g. `app/backend/routes/messages.py`) with cosmetic-only collateral.
+2. Verify: `cd app/backend && uv run ruff format --check .` — if this still fails on files outside the diff, leave them alone (they pre-date this branch); record `Pass (drift remains in unmodified files)`.
 
 **Record result**: Pass / Fail (fixed)
 
