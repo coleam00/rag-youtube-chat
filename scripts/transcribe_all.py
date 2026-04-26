@@ -185,17 +185,26 @@ def _download_file(svc: Any, file_id: str, dest: Path) -> None:
 
 
 def _extract_audio(video: Path, audio: Path) -> None:
-    """Use ffmpeg to make a 16 kHz mono Opus file (small, lossless-enough)."""
+    """Use ffmpeg to make a 16 kHz mono Ogg-Opus file.
+
+    Whisper's accepted formats are flac/m4a/mp3/mp4/mpeg/mpga/oga/ogg/wav/webm,
+    and rejects bare `.opus`. We use `.ogg` extension (Ogg container) with
+    libopus inside — Whisper handles it. 32 kbps mono is small enough that
+    even a 90-min workshop comes in well under the 25 MB upload cap.
+    """
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
             "ffmpeg is required on PATH to extract audio for Whisper. Install it first."
         )
-    subprocess.run(
+    result = subprocess.run(
         [
             "ffmpeg",
             "-y",
             "-i",
             str(video),
+            "-vn",  # audio only — without this, ffmpeg tries to also re-encode
+                    # the video stream into the .ogg container (libtheora) which
+                    # crashes hard on some inputs.
             "-ac",
             "1",
             "-ar",
@@ -206,10 +215,17 @@ def _extract_audio(video: Path, audio: Path) -> None:
             "32k",
             str(audio),
         ],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        # Surface ffmpeg's tail-of-stderr — silent failures are nightmare to debug
+        # over a 5-hour run. The Windows access-violation exit code makes the
+        # subprocess module's default error message useless on its own.
+        tail = (result.stderr or "")[-1500:]
+        raise RuntimeError(
+            f"ffmpeg failed (rc={result.returncode}) for {video.name}:\n{tail}"
+        )
 
 
 def _md5_of_file(path: Path) -> str:
@@ -283,7 +299,7 @@ def _process_row(
     with tempfile.TemporaryDirectory(prefix="dynachat-") as tmp_str:
         tmp = Path(tmp_str)
         video = tmp / Path(drive_path).name
-        audio = tmp / "audio.opus"
+        audio = tmp / "audio.ogg"
         _download_file(svc, file_id, video)
         video_md5 = _md5_of_file(video)
 

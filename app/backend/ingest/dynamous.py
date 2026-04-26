@@ -52,7 +52,11 @@ logger = logging.getLogger(__name__)
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
 _TIMESTAMP_HEADING_RE = re.compile(
-    r"^##\s*\[(\d{1,2}):(\d{2}):(\d{2})\](?:\s+(.+))?$",
+    # The trailing optional-heading group uses `[ \t]+([^\n]+)` (NOT `\s+(.+)`)
+    # because `\s` matches newlines and would happily eat the body content of
+    # the segment as the "heading", leaving an empty body for the chunker.
+    # Anchoring to a single line is required.
+    r"^##[ \t]*\[(\d{1,2}):(\d{2}):(\d{2})\](?:[ \t]+([^\n]+))?[ \t]*$",
     re.MULTILINE,
 )
 
