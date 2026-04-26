@@ -61,7 +61,7 @@ container by `docker exec`-ing into the color named in `upstream.conf`. Two
 systemd units in `deploy/systemd/` drive it on a schedule:
 
 - `dynachat-channel-sync.service` — one-shot, calls `sync-channel.sh`
-- `dynachat-channel-sync.timer`   — every hour, with a 5-min jitter
+- `dynachat-channel-sync.timer`   — daily at 00:00 UTC, with a 30-min jitter
 
 ### Install on a host
 
