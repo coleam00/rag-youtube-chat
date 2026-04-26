@@ -27,7 +27,7 @@ from pathlib import Path
 # so put app/ (parents[2]) on sys.path. Mirrors scripts/eval_retrieval.py.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from backend.db.postgres import close_pg_pool
+from backend.db.postgres import close_pg_pool, init_pg_pool
 from backend.routes.channels import sync_channel
 
 
@@ -54,6 +54,16 @@ async def main() -> int:
     logger.info(
         "starting channel sync via CLI (limit=%s, force=%s)", args.limit, args.force
     )
+
+    # Stand the asyncpg pool up ourselves — the FastAPI lifespan does this
+    # at uvicorn startup, but we're a separate Python process inside the same
+    # container. Without this, the first repository call hits the
+    # "Postgres pool is not initialised" guard.
+    try:
+        await init_pg_pool()
+    except Exception as exc:
+        logger.exception("Postgres pool init failed: %s", exc)
+        return 1
 
     try:
         result = await sync_channel(limit=args.limit, force=args.force)
