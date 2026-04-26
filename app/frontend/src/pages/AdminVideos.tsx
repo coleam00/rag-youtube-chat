@@ -6,7 +6,7 @@
  * rows at once. Authoritative list is cheaper than local bookkeeping.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { AddVideoModal } from '../components/AddVideoModal';
 import { useAdminVideos } from '../hooks/useAdminVideos';
@@ -19,7 +19,10 @@ export function AdminVideos() {
   const { addToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const { videos, loading, refetch } = useAdminVideos(debouncedQuery);
+  const { videos, loading, refetch } = useAdminVideos(
+    debouncedQuery,
+    status === 'authed' && Boolean(user?.is_admin),
+  );
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -98,7 +101,7 @@ export function AdminVideos() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-primary)] p-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <header className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold">Library admin</h1>
@@ -138,27 +141,13 @@ export function AdminVideos() {
           </button>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <input
-            type="text"
-            placeholder="Search videos..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: 8,
-              background: '#1e293b',
-              border: '1px solid #334155',
-              color: '#f1f5f9',
-              fontSize: 13,
-              outline: 'none',
-              transition: 'border-color 0.15s',
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = '#3b82f6')}
-            onBlur={(e) => (e.currentTarget.style.borderColor = '#334155')}
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Search videos..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 mb-3 rounded-lg bg-[var(--surface-1)] border border-[var(--border)] text-[var(--text-primary)] text-[13px] outline-none transition-colors focus:border-[var(--accent)]"
+        />
 
         <div className="bg-[var(--surface-1)] border border-[var(--border)] rounded-lg overflow-hidden">
           {loading ? (
@@ -198,23 +187,25 @@ export function AdminVideos() {
                       <td className="px-4 py-2 text-[var(--text-secondary)]">
                         {v.created_at.slice(0, 10)}
                       </td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleResync(v)}
-                          disabled={isPending || syncing}
-                          className="px-2 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-2)] disabled:opacity-50 mr-2"
-                        >
-                          {isPending ? '…' : 'Re-sync'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(v)}
-                          disabled={isPending || syncing}
-                          className="px-2 py-1 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--surface-2)] disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-3 whitespace-nowrap justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleResync(v)}
+                            disabled={isPending || syncing}
+                            className="px-3 py-1.5 text-xs rounded border border-[var(--border)] hover:bg-[var(--surface-2)] disabled:opacity-50"
+                          >
+                            {isPending ? '…' : 'Re-sync'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(v)}
+                            disabled={isPending || syncing}
+                            className="px-3 py-1.5 text-xs rounded border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--surface-2)] disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

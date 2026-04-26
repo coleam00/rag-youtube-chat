@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import cast
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -153,13 +152,10 @@ async def _post_message(*, answer_tokens: list[str], retrieved_chunks: list[dict
     return resp.text
 
 
-def _parse_sources(body: str) -> list[dict]:
-    lines = body.splitlines()
-    for i, line in enumerate(lines):
-        if line == "event: sources":
-            payload = lines[i + 1].removeprefix("data: ")
-            return cast(list[dict], json.loads(payload))
-    return []
+def _parse_sources(body: str) -> list[dict[str, object]]:
+    idx = body.index("event: sources")
+    result: list[dict[str, object]] = json.loads(body[idx:].split("\n", 2)[1][len("data: ") :])
+    return result
 
 
 def _chunk(cid: str, vid: str = "v1") -> dict:
