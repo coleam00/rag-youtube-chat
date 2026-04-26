@@ -1,15 +1,14 @@
 [Unit]
-Description=Hourly trigger for DynaChat YouTube channel sync
+Description=Daily trigger for DynaChat YouTube channel sync
 Requires=dynachat-channel-sync.service
 
 [Timer]
-# Run roughly hourly. Persistent=true catches up after host reboots so the
-# clock doesn't drift across maintenance windows. RandomizedDelaySec spreads
-# the load so we don't hammer Supadata at :00 every hour if multiple
-# instances ever exist.
-OnBootSec=10min
-OnUnitActiveSec=1h
-RandomizedDelaySec=5min
+# Once a day at 00:00 UTC ± 30min jitter. Persistent=true catches up if the
+# host was down at the scheduled time so we don't silently skip days across
+# maintenance windows. Cole publishes new videos infrequently enough that
+# hourly was overkill and a daily cadence keeps Supadata calls cheap.
+OnCalendar=daily
+RandomizedDelaySec=30min
 Persistent=true
 Unit=dynachat-channel-sync.service
 
