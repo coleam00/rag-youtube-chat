@@ -5,7 +5,7 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/dynachat/app/deploy/sync-channel.sh
+ExecStart=/usr/bin/bash /opt/dynachat/app/deploy/sync-channel.sh
 
 # 10-minute budget — the sync is sequential and a backlog of new videos
 # can take a few minutes per video (Supadata fetch + Whisper-style chunking
