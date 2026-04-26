@@ -48,7 +48,7 @@ vi.mock('../lib/authApi', () => ({
   }),
 }));
 
-const brandingText = "Ask Cole Medin's YouTube library anything";
+const brandingText = "Ask Cole Medin's YouTube videos and Dynamous lessons anything";
 
 describe('Login page', () => {
   it('renders branding header with logo, title, and tagline', () => {

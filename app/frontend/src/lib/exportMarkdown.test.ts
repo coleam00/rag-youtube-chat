@@ -239,6 +239,37 @@ describe('formatCitation', () => {
     const result = formatCitation(citation);
     expect(result).toContain('— 0:10–0:20');
   });
+
+  it('links Dynamous citations to lesson_url instead of YouTube ?t= deep-link', () => {
+    const citation = {
+      ...baseCitation,
+      source_type: 'dynamous' as const,
+      video_url: '',
+      lesson_url: 'https://community.dynamous.ai/c/module-1/lessons/123',
+    };
+    const result = formatCitation(citation);
+    expect(result).toContain(
+      '[Test Video Title](https://community.dynamous.ai/c/module-1/lessons/123)',
+    );
+    expect(result).not.toContain('youtube.com');
+    expect(result).not.toContain('(timestamp link unavailable)');
+    expect(result).toContain('0:10–0:20');
+    expect(result).toContain('> "Test snippet text"');
+  });
+
+  it('falls back gracefully when Dynamous citation has no lesson_url', () => {
+    const citation = {
+      ...baseCitation,
+      source_type: 'dynamous' as const,
+      video_url: '',
+      lesson_url: '',
+    };
+    const result = formatCitation(citation);
+    expect(result).not.toContain('](');
+    expect(result).toContain('Test Video Title');
+    expect(result).toContain('0:10–0:20');
+    expect(result).toContain('> "Test snippet text"');
+  });
 });
 
 describe('formatSources', () => {

@@ -85,6 +85,23 @@ export interface ConversationWithMessages extends Conversation {
   messages: Message[];
 }
 
+/**
+ * Thrown by `request()` whenever a non-2xx response comes back. Carries the
+ * status and parsed `detail` so callers can render friendly UI (e.g.,
+ * a real 404 page on a missing conversation, instead of dumping JSON).
+ */
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+
+  constructor(status: number, detail: string) {
+    super(`API error ${status}: ${detail}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
@@ -97,11 +114,22 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       const returnTo = window.location.pathname + window.location.search;
       window.location.assign(`/login?from=${encodeURIComponent(returnTo)}`);
     }
-    throw new Error('Not authenticated');
+    throw new ApiError(401, 'Not authenticated');
   }
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
+    // Try to extract `detail` from the FastAPI JSON error envelope, fall
+    // back to raw text so we still surface unexpected responses.
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { detail?: string };
+      if (parsed && typeof parsed.detail === 'string') {
+        detail = parsed.detail;
+      }
+    } catch {
+      // not JSON — keep `text` as-is
+    }
+    throw new ApiError(res.status, detail);
   }
   return res.json() as Promise<T>;
 }
@@ -193,7 +221,14 @@ export const deleteVideo = async (id: string): Promise<void> => {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { detail?: string };
+      if (parsed && typeof parsed.detail === 'string') detail = parsed.detail;
+    } catch {
+      // not JSON
+    }
+    throw new ApiError(res.status, detail);
   }
 };
 

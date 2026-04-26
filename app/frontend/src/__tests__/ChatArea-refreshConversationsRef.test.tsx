@@ -290,7 +290,13 @@ describe('ChatArea refreshConversationsRef', () => {
       expect(api.createConversation).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/c/new-conv-123');
+    // Issue: first-send race fix — the user's message rides along as
+    // React Router state so the next-mount ChatArea can dispatch it.
+    // Without this, `pendingMessageRef` was reset across the route change
+    // and the message was silently dropped.
+    expect(mockNavigate).toHaveBeenCalledWith('/c/new-conv-123', {
+      state: { initialMessage: 'Hello world' },
+    });
   });
 
   it('should handle createConversation error gracefully', async () => {

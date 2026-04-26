@@ -1,5 +1,5 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { type Location, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useMessages } from '../hooks/useMessages';
 import { useStreamingResponse } from '../hooks/useStreamingResponse';
@@ -96,7 +96,8 @@ function EmptyState({ onStarterClick }: EmptyStateProps) {
         Ask anything about the video library
       </h2>
       <p style={{ margin: '0 0 24px', color: '#94a3b8', maxWidth: 380, lineHeight: 1.6 }}>
-        This AI has access to transcripts from a curated collection of YouTube videos.
+        This AI has access to transcripts from Cole Medin&apos;s YouTube channel and the
+        Dynamous course + workshop library.
       </p>
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 400 }}
@@ -163,6 +164,48 @@ function LoadErrorState({ message, onRetry }: { message: string; onRetry: () => 
         }}
       >
         Retry
+      </button>
+    </div>
+  );
+}
+
+// ── Conversation-not-found state ──────────────────────────────────
+// Rendered when GET /conversations/<id> returns 404 (deleted, or never
+// existed, or owned by a different user). Friendlier than the raw
+// `API error 404: {"detail":"Conversation not found"}` we used to show.
+function ConversationNotFound({ onBack }: { onBack: () => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
+        padding: 40,
+        textAlign: 'center',
+      }}
+    >
+      <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 600, color: '#f1f5f9' }}>
+        Conversation not found
+      </h2>
+      <p style={{ margin: '0 0 20px', color: '#94a3b8', maxWidth: 400, lineHeight: 1.6 }}>
+        This conversation doesn&apos;t exist or you don&apos;t have access to it.
+      </p>
+      <button
+        onClick={onBack}
+        style={{
+          background: '#3b82f6',
+          border: 'none',
+          borderRadius: 8,
+          color: '#fff',
+          cursor: 'pointer',
+          padding: '8px 20px',
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+      >
+        Back to home
       </button>
     </div>
   );
@@ -237,9 +280,19 @@ interface ChatAreaProps {
   refreshConversationsRef?: MutableRefObject<(() => Promise<void>) | null>;
 }
 
+// React Router state shape used to thread the user's first message from the
+// landing page (`/`) to the new conversation page (`/c/<id>`). Without this,
+// `pendingMessageRef` gets reset because LandingPage and ConversationPage are
+// different route components — React Router unmounts one and mounts the other
+// on navigation, so any per-instance ref is fresh in the new mount.
+interface ConvLocationState {
+  initialMessage?: string;
+}
+
 export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaProps) {
   const navigate = useNavigate();
-  const { messages, setMessages, loading, error, conversation } = useMessages(
+  const location = useLocation() as Location & { state: ConvLocationState | null };
+  const { messages, setMessages, loading, error, notFound, conversation } = useMessages(
     conversationId || null,
   );
   const {
@@ -252,9 +305,6 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   } = useStreamingResponse();
   const { addToast } = useToast();
   const { refresh: refreshAuth } = useAuth();
-
-  // Pending message to send after creating a conversation on the landing page
-  const pendingMessageRef = useRef<string | null>(null);
 
   const chatInputRef = useRef<ChatInputHandle>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -305,15 +355,15 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
   // ── Send handler ──
   const handleSend = useCallback(
     async (content: string) => {
-      // If no conversation, create one first then send
+      // If no conversation, create one first then send. Thread the user's
+      // message via React Router `state` so the next-mount ChatArea picks
+      // it up (a per-instance ref would be reset across the route change).
       if (!conversationId) {
         if (isStreaming) return;
-        pendingMessageRef.current = content;
         try {
           const conv = await createConversation();
-          navigate(`/c/${conv.id}`);
+          navigate(`/c/${conv.id}`, { state: { initialMessage: content } satisfies ConvLocationState });
         } catch (e) {
-          pendingMessageRef.current = null;
           console.error(
             '[ChatArea] Failed to create conversation:',
             e instanceof Error ? e.message : String(e),
@@ -404,21 +454,20 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
     ],
   );
 
-  // ── Send pending message after conversation is created ──
+  // Send pending message after conversation is created (post-route-change).
+  // We read from `location.state.initialMessage`, which survives the
+  // LandingPage → ConversationPage remount. Clear state with `replace`
+  // immediately so a back/forward or a refresh doesn't re-fire the send.
+  const dispatchedInitialRef = useRef(false);
   useEffect(() => {
-    if (!conversationId || !pendingMessageRef.current) return;
-
-    const msg = pendingMessageRef.current;
-    pendingMessageRef.current = null;
-    // 2s timeout — if handleSend hasn't completed by then, show error to user.
-    // This catches the silent-failure path where conversationId is set but the pending
-    // message never fires (e.g., component re-mount, race condition).
-    const timeoutId = setTimeout(() => {
-      addToast('Failed to send message. Please try again.', 'error');
-    }, 2000);
+    if (!conversationId) return;
+    if (dispatchedInitialRef.current) return;
+    const msg = location.state?.initialMessage;
+    if (!msg) return;
+    dispatchedInitialRef.current = true;
+    navigate(`/c/${conversationId}`, { replace: true, state: null });
     handleSend(msg);
-    return () => clearTimeout(timeoutId);
-  }, [conversationId, handleSend]);
+  }, [conversationId, location.state, navigate, handleSend]);
 
   // ── Retry failed message — re-attempt the API call with same content ──
   const handleRetry = useCallback(() => {
@@ -437,8 +486,9 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
 
   // ── Render ──
   const showEmpty = !conversationId;
-  const showError = !loading && !!error && !showEmpty;
-  const showMessages = !loading && !error && !showEmpty;
+  const showNotFound = !loading && notFound && !showEmpty;
+  const showError = !loading && !!error && !notFound && !showEmpty;
+  const showMessages = !loading && !error && !notFound && !showEmpty;
   const showSkeleton = loading && !showEmpty;
 
   const showStreamingBubble = isStreaming;
@@ -538,6 +588,8 @@ export function ChatArea({ conversationId, refreshConversationsRef }: ChatAreaPr
             onRetry={() => window.location.reload()}
           />
         )}
+
+        {showNotFound && <ConversationNotFound onBack={() => navigate('/')} />}
 
         {showMessages && (
           <div style={{ padding: '24px 24px 0', display: 'flex', flexDirection: 'column' }}>

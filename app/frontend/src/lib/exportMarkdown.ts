@@ -21,6 +21,21 @@ export function formatTimestamp(seconds: number): string {
 export function formatCitation(citation: Citation): string {
   if (!citation.snippet?.trim()) return '';
 
+  const range = `${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}`;
+
+  // Issue #147: Dynamous citations link to the Circle lesson_url. Circle
+  // doesn't support timestamp deep-links, so the (MM:SS–MM:SS) range is
+  // shown as text only and the URL points to the lesson root.
+  if (citation.source_type === 'dynamous') {
+    const lessonUrl = citation.lesson_url?.trim();
+    if (!lessonUrl) {
+      return `${citation.video_title} — ${range}\n  > "${citation.snippet}"`;
+    }
+    const link = `[${citation.video_title}](${lessonUrl})`;
+    return `- ${link} — ${range}\n  > "${citation.snippet}"`;
+  }
+
+  // Default / 'youtube': embedded player + ?t= deep-link.
   let videoId: string;
   try {
     videoId = new URL(citation.video_url).searchParams.get('v') ?? '';
@@ -28,19 +43,19 @@ export function formatCitation(citation: Citation): string {
     console.warn(
       `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
     );
-    return `${citation.video_title} (timestamp link unavailable) — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}`;
+    return `${citation.video_title} (timestamp link unavailable) — ${range}`;
   }
 
   if (!videoId) {
     console.warn(
       `[exportMarkdown] Skipping timestamp link — invalid video_url: "${citation.video_url}"`,
     );
-    return `${citation.video_title} (timestamp link unavailable) — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}`;
+    return `${citation.video_title} (timestamp link unavailable) — ${range}`;
   }
 
   const externalUrl = `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(citation.start_seconds)}s`;
   const link = `[${citation.video_title}](${externalUrl})`;
-  return `- ${link} — ${formatTimestamp(citation.start_seconds)}–${formatTimestamp(citation.end_seconds)}\n  > "${citation.snippet}"`;
+  return `- ${link} — ${range}\n  > "${citation.snippet}"`;
 }
 
 export function formatSources(sources: Citation[]): string {
