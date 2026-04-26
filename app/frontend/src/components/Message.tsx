@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Citation } from '../lib/api';
+import { formatTimestamp } from './CitationModal';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface MessageProps {
@@ -27,13 +28,6 @@ function TypingIndicator() {
 }
 
 // ── Source citations section ──────────────────────────────────────
-function formatTimestamp(seconds: number): string {
-  const s = Math.floor(seconds);
-  const mins = Math.floor(s / 60);
-  const secs = s % 60;
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
 // Two-tier citation render (issue #176): Tier 1 "Sources cited" (visible by
 // default) when any chunk has is_cited=true; Tier 2 "All sources consulted"
 // uses the existing toggle. Falls back to the legacy flat list when no chunk
@@ -49,6 +43,7 @@ function citationChip(
       key={`${citation.chunk_id}-${i}`}
       onClick={() => onCitationClick?.(citation)}
       title={`${citation.video_title} at ${formatTimestamp(citation.start_seconds)}\n${citation.snippet}`}
+      className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
       style={{
         display: 'inline-block',
         padding: '3px 10px',
@@ -102,6 +97,7 @@ function SourceCitations({
       {(!showTwoTier || consulted.length > 0) && (
         <button
           onClick={() => setExpanded((v) => !v)}
+          className="focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
           style={{
             background: 'transparent',
             border: 'none',
@@ -183,6 +179,7 @@ export function Message({
           padding: '12px 16px',
           lineHeight: 1.7,
           wordBreak: 'break-word',
+          borderLeft: isUser ? '2px solid var(--text-tertiary)' : '2px solid var(--accent)',
         }}
       >
         {isStreaming && !content ? (
