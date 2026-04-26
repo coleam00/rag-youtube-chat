@@ -163,6 +163,77 @@ async def test_build_system_prompt_catalog_empty_library() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Membership-aware catalog filtering (issue #147)
+# ---------------------------------------------------------------------------
+
+
+async def test_build_system_prompt_catalog_excludes_dynamous_for_non_members() -> None:
+    """Non-members must not see Dynamous video titles or ids in the catalog
+    block. Without this filter, the catalog leaks the existence of every
+    paid lesson — defense-in-depth blocks transcript retrieval, but the
+    model can still surface titles/ids from the catalog in its prose."""
+    from backend.llm.openrouter import build_system_prompt
+
+    full_catalog = [
+        {"id": "yt-1", "title": "YouTube Vid 1", "url": "https://youtu.be/x", "source_type": "youtube"},
+        {"id": "dyn-1", "title": "1.6 Conversational vs. Autonomous Agents", "url": "", "source_type": "dynamous"},
+        {"id": "yt-2", "title": "YouTube Vid 2", "url": "https://youtu.be/y", "source_type": "youtube"},
+    ]
+    with (
+        patch("backend.llm.openrouter.CATALOG_ENABLED", True),
+        patch("backend.rag.catalog.get_catalog", new_callable=AsyncMock, return_value=full_catalog),
+    ):
+        blocks = await build_system_prompt(max_tool_calls=6, is_member=False)
+    assert len(blocks) == 2
+    catalog_text = blocks[1]["text"]
+    # Dynamous title and id MUST NOT appear for non-members
+    assert "1.6 Conversational vs. Autonomous Agents" not in catalog_text
+    assert "dyn-1" not in catalog_text
+    # YouTube titles and ids ARE expected
+    assert "YouTube Vid 1" in catalog_text
+    assert "yt-1" in catalog_text
+    assert "YouTube Vid 2" in catalog_text
+
+
+async def test_build_system_prompt_catalog_includes_dynamous_for_members() -> None:
+    """Members get the full catalog including Dynamous lessons."""
+    from backend.llm.openrouter import build_system_prompt
+
+    full_catalog = [
+        {"id": "yt-1", "title": "YouTube Vid 1", "url": "https://youtu.be/x", "source_type": "youtube"},
+        {"id": "dyn-1", "title": "1.6 Conversational vs. Autonomous Agents", "url": "", "source_type": "dynamous"},
+    ]
+    with (
+        patch("backend.llm.openrouter.CATALOG_ENABLED", True),
+        patch("backend.rag.catalog.get_catalog", new_callable=AsyncMock, return_value=full_catalog),
+    ):
+        blocks = await build_system_prompt(max_tool_calls=6, is_member=True)
+    catalog_text = blocks[1]["text"]
+    assert "1.6 Conversational vs. Autonomous Agents" in catalog_text
+    assert "dyn-1" in catalog_text
+    assert "YouTube Vid 1" in catalog_text
+
+
+async def test_build_system_prompt_catalog_treats_missing_source_type_as_youtube() -> None:
+    """Backwards-compat: videos predating the source_type column (or with
+    NULL source_type) must be treated as YouTube — the original library."""
+    from backend.llm.openrouter import build_system_prompt
+
+    full_catalog = [
+        {"id": "old-1", "title": "Legacy Video", "url": "https://youtu.be/z"},  # no source_type key
+        {"id": "old-2", "title": "Null Source", "url": "https://youtu.be/q", "source_type": None},
+    ]
+    with (
+        patch("backend.llm.openrouter.CATALOG_ENABLED", True),
+        patch("backend.rag.catalog.get_catalog", new_callable=AsyncMock, return_value=full_catalog),
+    ):
+        blocks = await build_system_prompt(max_tool_calls=6, is_member=False)
+    catalog_text = blocks[1]["text"]
+    assert "Legacy Video" in catalog_text
+    assert "Null Source" in catalog_text
+
+
+# ---------------------------------------------------------------------------
 # Additional coverage: CATALOG_TIER wiring, missing url, DB failure
 # ---------------------------------------------------------------------------
 

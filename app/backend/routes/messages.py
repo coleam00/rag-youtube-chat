@@ -175,12 +175,18 @@ async def create_message(
         # stream; use them at [DONE] to flag is_cited on retrieved chunks.
         marker_stripper = CitationMarkerStripper()
         try:
+            # is_member_for_turn is captured above when tools are wired.
+            # Re-bind to a local that's always defined so we can pass it
+            # to stream_chat regardless of whether tools are enabled
+            # (catalog filtering belongs to the prompt, not the tools).
+            turn_is_member = bool(current_user.get("is_member") or False)
             async for sse_chunk in stream_chat(
                 llm_messages,
                 tools=tools_param,
                 tool_executor=executor,
                 max_tool_calls=max_tool_calls,
                 final_text_out=final_text_buf,
+                is_member=turn_is_member,
             ):
                 if sse_chunk == "data: [DONE]\n\n":
                     # Flush any text held back as a partial marker.

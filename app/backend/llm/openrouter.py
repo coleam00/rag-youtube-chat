@@ -110,12 +110,19 @@ Rules.
 SYSTEM_PROMPT_TEMPLATE = _BASE_SYSTEM_PROMPT
 
 
-async def build_system_prompt(max_tool_calls: int = 0) -> list[dict]:
+async def build_system_prompt(max_tool_calls: int = 0, is_member: bool = False) -> list[dict]:
     """Build the system prompt as a list of content blocks.
 
     Returns a multi-block array suitable for ``{"role": "system", "content": [...]}``.
     When ``CATALOG_ENABLED`` is true and videos exist, a catalog block with
     ``cache_control`` is appended so Anthropic can cache the static content.
+
+    The catalog block is filtered by ``is_member``: non-members see only
+    ``source_type='youtube'`` videos, mirroring the retrieval-layer ACL
+    (issue #147). Without this filter, non-members would see every paid
+    Dynamous lesson title and id in the cached prompt — defense-in-depth
+    blocks transcript retrieval, but the model can still leak titles and
+    ids in its prose by referring to "the catalog".
     """
     text = _BASE_SYSTEM_PROMPT
     if max_tool_calls > 0:
@@ -125,6 +132,11 @@ async def build_system_prompt(max_tool_calls: int = 0) -> list[dict]:
 
     if CATALOG_ENABLED:
         videos = await catalog.get_catalog()
+        if not is_member:
+            videos = [
+                v for v in videos
+                if (v.get("source_type") or "youtube") == "youtube"
+            ]
         if videos:
             blocks.append(catalog.build_catalog_block(videos, CATALOG_TIER))
             return blocks
@@ -164,6 +176,7 @@ async def stream_chat(
     tool_executor: ToolExecutor | None = None,
     max_tool_calls: int = 0,
     final_text_out: list[str] | None = None,
+    is_member: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Stream a chat completion via OpenRouter. When tools + executor are
     supplied, execute tool calls in a loop until finish_reason=stop.
@@ -177,10 +190,16 @@ async def stream_chat(
     tool_calls round). Callers use this for refusal detection so
     inter-round commentary like "let me try a different search" does
     not trigger false positive refusals.
+
+    ``is_member`` flows through to ``build_system_prompt`` so the catalog
+    block (issue #147) only lists YouTube videos for non-members.
     """
     client = _get_async_client()
     tools_active = bool(tools) and tool_executor is not None and max_tool_calls > 0
-    system_blocks = await build_system_prompt(max_tool_calls=max_tool_calls if tools_active else 0)
+    system_blocks = await build_system_prompt(
+        max_tool_calls=max_tool_calls if tools_active else 0,
+        is_member=is_member,
+    )
 
     full_messages: list[ChatCompletionMessageParam] = [
         # openai stubs don't model list-content system messages; runtime accepts it.
